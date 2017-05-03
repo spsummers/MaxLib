@@ -1,0 +1,77 @@
+package tree;
+
+import java.util.Arrays;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class Tree extends KernelLib {
+
+        public DFEVar[] x;
+
+        public Tree(KernelLib owner, DFEVar[] x){
+                super(owner);
+                this.x = x;
+        }
+
+        public DFEVar sum(){
+                return treeSum(this.x);
+        }
+
+        public DFEVar or(){
+                return treeOr(this.x);
+        }
+
+        public DFEVar and(){
+                return treeAnd(this.x);
+        }
+
+        /* Return the optimal adder-tree to sum the array x */
+        private DFEVar treeSum(DFEVar[] x){
+                if(x.length == 0){
+                        throw new IllegalArgumentException();
+                }else if(x.length == 1){
+                        return x[0];
+                }else if(isIntPow2(x.length)){
+                        return (treeSum(Arrays.copyOfRange(x, 0, x.length/2)) + treeSum(Arrays.copyOfRange(x, x.length/2, x.length)));
+                }else{
+                        return (treeSum(Arrays.copyOfRange(x, 0, (int)Math.pow(2, floorPow2(x.length)))) + treeSum(Arrays.copyOfRange(x, (int)Math.pow(2, floorPow2(x.length)), x.length)));
+                }
+        }
+
+        /* Return the optimal or-tree to OR the array x */
+        private DFEVar treeOr(DFEVar[] x){
+                if(x.length == 1){
+                        return x[0];
+                }else if(isIntPow2(x.length)){
+                        return (treeOr(Arrays.copyOfRange(x, 0, x.length/2)) | treeOr(Arrays.copyOfRange(x, x.length/2, x.length)));
+                }else{
+                        return (treeOr(Arrays.copyOfRange(x, 0, (int)Math.pow(2, floorPow2(x.length)))) | treeOr(Arrays.copyOfRange(x, (int)Math.pow(2, floorPow2(x.length)), x.length)));
+                }
+        }
+
+        private DFEVar treeAnd(DFEVar[] x){
+                if(x.length == 1){
+                        return x[0];
+                }else if(isIntPow2(x.length)){
+                        return (treeAnd(Arrays.copyOfRange(x, 0, x.length/2)) & treeAnd(Arrays.copyOfRange(x, x.length/2, x.length)));
+                }else{
+                        return (treeAnd(Arrays.copyOfRange(x, 0, (int)Math.pow(2, floorPow2(x.length)))) & treeAnd(Arrays.copyOfRange(x, (int)Math.pow(2, floorPow2(x.length)), x.length)));
+                }
+        }
+
+        private boolean isIntPow2(int n){
+                return !((pow2(n) - floorPow2(n)) > 1e-10);
+        }
+
+        /* Function returns log_2(n) rounding down */
+        private int floorPow2(int n){
+                if(n <= 0) throw new IllegalArgumentException();
+                return 31 - Integer.numberOfLeadingZeros(n);
+        }
+        /* Function returns log_2(n) */
+        private float pow2(int n){
+                return (float) (Math.log(n)/Math.log(2));
+        }
+
+}

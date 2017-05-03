@@ -1,0 +1,70 @@
+package misc;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
+
+/**
+ * Fan out a variable, with register insertion to help meet timing
+ * @author sioni
+ *
+ * @param <T>
+ */
+public class FanOut<T extends KernelObject<T>> extends KernelLib{
+
+	private static Deque<Integer> maxFanOut = new ArrayDeque<Integer>() {{ add(10); }};
+
+	T x;
+	List<T> xFanned;
+
+	/**
+	 * Fan x out n times, inserting layers of registers if n > maxFanOut
+	 * @param kernel
+	 * @param x
+	 * @param n
+	 */
+	public FanOut(Kernel kernel, T x, int n){
+		super(kernel);
+		this.xFanned = new ArrayList<T>(n);
+		if(n < maxFanOut.peek()){
+			for(int i = 0; i < n; i++){
+				this.xFanned.add(x);
+			}
+		}else{
+			List<List<T>> xPartials = new ArrayList<List<T>>((int)Math.ceil(n / maxFanOut.peek()));
+			List<T> xFannedLocal = new ArrayList<T>(maxFanOut.peek());
+			for(int i = 0; i < maxFanOut.peek(); i++){
+				xFannedLocal.add(kernel.optimization.pipeline(x));
+			}
+			for(int i = 0; i < (int)Math.ceil(n / maxFanOut.peek()); i++){
+				if(i == xPartials.size() - 1){
+					xPartials.add(new FanOut<T>(kernel, xFannedLocal[i], n - i * (int) Math.floor(n / maxFanOut.peek())).xFanned);
+				}else{
+					xPartials.add(new FanOut<T>(kernel, xFannedLocal[i], (int)Math.floor(n / maxFanOut.peek())).xFanned);
+				}
+			}
+			for(List<T> xPartial : xPartials){
+				for(T xP : xPartial){
+					this.xFanned.add(xP);
+				}
+			}
+		}
+	}
+
+	public T[] xFanned(T[] array){
+		return xFanned.toArray(array);
+	}
+
+	public static void pushMaxFanOut(int n){
+		maxFanOut.push(n);
+	}
+
+	public static void popMaxFanOut(){
+		maxFanOut.pop();
+	}
+}
