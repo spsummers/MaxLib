@@ -1,0 +1,58 @@
+package matrix;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class Vector extends Matrix{
+
+	public enum Shape{
+		ROW, COL;
+	}
+
+	private Shape shape = Shape.COL;
+
+	public Vector(DFEVar[] data){
+		super(data[0].getKernel());
+		DFEVar[][] matData = new DFEVar[data.length][1];
+		for(int i = 0; i < data.length; i++)
+			matData[i][0] = data[i];
+		this.data(matData);
+	}
+
+	public Vector(DFEVar[][] data){
+		super(data[0][0].getKernel());
+		if(data.length != 1 && data[0].length != 1){
+			System.err.println("Vector: Trying to construct a Vector from 2D array data with 2 non-unity axes");
+			this.data(null);
+		}else{
+			if(data.length == 1){
+				shape = Shape.ROW;
+			}else if(data[0].length == 1){
+				shape = Shape.COL;
+			}
+			this.data(data);
+		}
+	}
+
+	public Vector(Kernel owner){
+		super(owner);
+	}
+
+	public DFEVar data(int i){
+		return this.data()[i][0];
+	}
+
+	public Shape shape(){ return shape; }
+
+	public void shape(Shape shape){
+		if(shape != this.shape){
+			DFEVar[][] newData = new DFEVar[this.nCols()][this.nRows()];
+			for(int i = 0; i < nCols(); i++)
+				for(int j = 0; j < nRows(); j++)
+					newData[i][j] = this.data(j, i);
+			this.data = newData;
+			this.shape = shape;
+		}
+	}
+
+}

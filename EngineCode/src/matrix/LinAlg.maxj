@@ -1,0 +1,394 @@
+package matrix;
+
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Deque;
+
+import treeLib.Tree;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class LinAlg extends KernelLib{
+	protected DFEVar[][] data;
+	private DFEVar[][][] intermediateData;
+	private static boolean storeIntermediates;
+	private int nRows;
+	private int nCols;
+	private final Kernel kernel;
+	static Deque<Double> dspPipeliningFactor = new ArrayDeque<Double>(Arrays.asList(1.0));
+
+	public LinAlg(Kernel owner){
+		super(owner);
+		this.kernel = owner;
+	}
+
+	public LinAlg(Kernel owner, int nRows, int nCols){
+		super(owner);
+		data = new DFEVar[nRows][nCols];
+		this.nRows = nRows;
+		this.nCols = nCols;
+		this.kernel = owner;
+		this.intermediateData = null;
+	}
+
+	public LinAlg(DFEVar[][] data){
+		super(data[0][0].getKernel());
+		this.kernel = data[0][0].getKernel();
+		this.nRows = data.length;
+		this.nCols = data[0].length;
+		this.data = data;
+		this.intermediateData = null;
+	}
+
+	public int nRows(){ return nRows; }
+	public int nCols(){ return nCols; }
+	public DFEVar[][] data(){return data;}
+	public DFEVar data(int i, int j){ return data[i][j]; }
+
+	public static void pushDSPPipeliningFactor(double f){
+		dspPipeliningFactor.push(f);
+	}
+	public static void popDSPPipeliningFactor(){
+		dspPipeliningFactor.pop();
+	}
+
+	public static void storeIntermediates(boolean store){
+		storeIntermediates = store;
+	}
+
+	public void setIntermediates(DFEVar[][][] data){
+		this.intermediateData = data;
+	}
+
+	public DFEVar[][][] getIntermediates(){
+		return this.intermediateData;
+	}
+
+	public void data(DFEVar[][] data){
+		this.data = data;
+		this.nRows = data.length;
+		this.nCols = data[0].length;
+	}
+
+	public void nRows(int nRows){
+		this.nRows = nRows;
+	}
+	public void nCols(int nCols){
+		this.nCols = nCols;
+	}
+
+	public LinAlg mul(LinAlg rhs){
+		// Multiply vector by matrix
+		// TODO needs testing
+		//if(this.nCols() != rhs.nRows())
+		//	System.err.println("Can't multiply matrix and vector");
+		DFEVar[][][] multiplierResults = new DFEVar[this.nRows()][rhs.nCols()][this.nCols()];
+		DFEVar[][] result = new DFEVar[this.nRows()][rhs.nCols()];
+		optimization.pushPipeliningFactor(dspPipeliningFactor.peek());
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				for(int k = 0; k < this.nCols(); k++){
+					multiplierResults[i][j][k] = this.data[i][k] * rhs.data()[k][j];
+				}
+			}
+		}
+		optimization.popPipeliningFactor();
+		// Sum the result
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
+				result[i][j] = tree.sum();
+			}
+		}
+		LinAlg x;
+		if(result.length == 1 || result[0].length == 1){
+			if(result.length == 1 &&  result[0].length == 1){
+				x = new Scalar(result);
+				System.out.println("SCALAR");
+			}else
+				x = new Vector(result);
+		}else{
+			x = new Matrix(result);
+		}
+		if(storeIntermediates){
+			x.setIntermediates(multiplierResults);
+		}
+		return x;
+	}
+
+    public LinAlg multiplyFOMAll(LinAlg rhs, FOM[][] fom){
+		// Multiply vector by matrix
+		// TODO needs testing
+		//if(this.nCols() != rhs.nRows())
+		//	System.err.println("Can't multiply matrix and vector");
+    	Kernel kernel = this.data(0, 0).getKernel();
+		DFEVar[][][] multiplierResults = new DFEVar[this.nRows()][rhs.nCols()][this.nCols()];
+		DFEVar[][] result = new DFEVar[this.nRows()][rhs.nCols()];
+		optimization.pushPipeliningFactor(dspPipeliningFactor.peek());
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				for(int k = 0; k < this.nCols(); k++){
+                    fom[i][j].push(kernel);
+					multiplierResults[i][j][k] = this.data[i][k] * rhs.data()[k][j];
+                    fom[i][j].pop(kernel);
+				}
+			}
+		}
+		optimization.popPipeliningFactor();
+		// Sum the result
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+                fom[i][j].push(kernel);
+				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
+				result[i][j] = tree.sum();
+                fom[i][j].pop(kernel);
+			}
+		}
+		LinAlg x;
+		if(result.length == 1 || result[0].length == 1){
+			if(result.length == 1 &&  result[0].length == 1){
+				x = new Scalar(result);
+				System.out.println("SCALAR");
+			}else
+				x = new Vector(result);
+		}else{
+			x = new Matrix(result);
+		}
+		if(storeIntermediates){
+			x.setIntermediates(multiplierResults);
+		}
+		return x;
+	}
+
+    public LinAlg multiplyFOMMul(LinAlg rhs, FOM[][] fom, int bitSizeLimit){
+		// Multiply vector by matrix
+		// TODO needs testing
+		//if(this.nCols() != rhs.nRows())
+		//	System.err.println("Can't multiply matrix and vector");
+    	Kernel kernel = this.data(0, 0).getKernel();
+		DFEVar[][][] multiplierResults = new DFEVar[this.nRows()][rhs.nCols()][this.nCols()];
+		DFEVar[][] result = new DFEVar[this.nRows()][rhs.nCols()];
+		optimization.pushPipeliningFactor(dspPipeliningFactor.peek());
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				for(int k = 0; k < this.nCols(); k++){
+                    fom[i][j].push(kernel);
+					multiplierResults[i][j][k] = this.data[i][k] * rhs.data()[k][j];
+                    fom[i][j].pop(kernel);
+				}
+			}
+		}
+		optimization.popPipeliningFactor();
+		// Sum the result
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+                //optimization.pushFixOpMode(Optimization.BitSizeLimit(bitSizeLimit), Optimization.OffsetNoOverflow(), MathOps.ADD);
+				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
+				result[i][j] = tree.sum();
+                //optimization.popFixOpMode(MathOps.ADD);
+			}
+		}
+		LinAlg x;
+		if(result.length == 1 || result[0].length == 1){
+			if(result.length == 1 &&  result[0].length == 1){
+				x = new Scalar(result);
+				System.out.println("SCALAR");
+			}else
+				x = new Vector(result);
+		}else{
+			x = new Matrix(result);
+		}
+		if(storeIntermediates){
+			x.setIntermediates(multiplierResults);
+		}
+		return x;
+	}
+
+    /**
+	 * Multiply 2 matrices, reusing calculations you already have from
+	 * having calculated the commutator
+	 * i.e A*B when we already have done and stored B*A
+	 * @param rhs
+	 * @param commutator
+	 * @return
+	 */
+	public LinAlg multiplyReuseCommutator(LinAlg rhs, LinAlg commutator){
+		DFEVar[][][] mults = commutator.getIntermediates();
+		DFEVar[][] result = new DFEVar[this.nRows()][rhs.nCols()];
+		if(mults == null){
+			System.err.println("No commutator intermediate data available.");
+			return null;
+		}
+		DFEVar multiplierResults[][][] = new DFEVar[this.nRows()][rhs.nCols()][this.nCols()];
+		optimization.pushPipeliningFactor(dspPipeliningFactor.peek());
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				for(int k = 0; k < this.nCols(); k++){
+					if(i == j){
+						multiplierResults[i][j][k] = mults[k][k][j];
+					}else{
+						multiplierResults[i][j][k] = this.data[i][k] * rhs.data()[k][j];
+					}
+				}
+			}
+		}
+		optimization.popPipeliningFactor();
+		// Sum the result
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < rhs.nCols(); j++){
+				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
+				result[i][j] = tree.sum();
+			}
+		}
+		LinAlg x;
+		if(result.length == 1 || result[0].length == 1){
+			if(result.length == 1 &&  result[0].length == 1)
+				x = new Scalar(result);
+			else
+				x = new Vector(result);
+		}else{
+			x = new Matrix(result);
+		}
+		if(storeIntermediates){
+			x.setIntermediates(multiplierResults);
+		}
+		return x;
+	}
+
+	public LinAlg sub(LinAlg rhs){
+		if((this.nRows() != rhs.nRows()) || (this.nCols() != rhs.nCols()))
+			System.err.println("Objects have different sizes in subtraction");
+		DFEVar[][] result = new DFEVar[this.nRows()][this.nCols()];
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < this.nCols(); j++){
+				result[i][j] = this.data()[i][j] - rhs.data()[i][j];
+			}
+		}
+		LinAlg resultObj;
+		if(this instanceof Matrix && rhs instanceof Matrix){
+			if(result.length == 1 || result[0].length == 1)
+				resultObj = new Vector(result);
+			else
+				resultObj = new Matrix(result);
+		}else if(this instanceof Vector && rhs instanceof Vector){
+			resultObj = new Vector(result);
+		}else{
+			resultObj = null;
+		}
+		return resultObj;
+	}
+
+	public LinAlg subFOM(LinAlg rhs, FOM[][] fom){
+		if((this.nRows() != rhs.nRows()) || (this.nCols() != rhs.nCols()))
+			System.err.println("Objects have different sizes in subtraction");
+		DFEVar[][] result = new DFEVar[this.nRows()][this.nCols()];
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < this.nCols(); j++){
+				fom[i][j].push(getKernel());
+				result[i][j] = this.data()[i][j] - rhs.data()[i][j];
+				fom[i][j].pop(getKernel());
+			}
+		}
+		LinAlg resultObj;
+		if(this instanceof Matrix && rhs instanceof Matrix){
+			if(result.length == 1 || result[0].length == 1)
+				resultObj = new Vector(result);
+			else
+				resultObj = new Matrix(result);
+		}else if(this instanceof Vector && rhs instanceof Vector){
+			resultObj = new Vector(result);
+		}else{
+			resultObj = null;
+		}
+		return resultObj;
+	}
+
+	public LinAlg add(LinAlg rhs){
+		if((this.nRows() != rhs.nRows()) || (this.nCols() != rhs.nCols()))
+			System.err.println("Objects have different sizes in subtraction");
+		DFEVar[][] result = new DFEVar[this.nRows()][this.nCols()];
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < this.nCols(); j++){
+				result[i][j] = this.data()[i][j] + rhs.data()[i][j];
+			}
+		}
+		LinAlg resultObj;
+		if(this instanceof Matrix && rhs instanceof Matrix){
+			if(result.length == 1 || result[0].length == 1)
+				resultObj = new Vector(result);
+			else
+				resultObj = new Matrix(result);
+		}else if(this instanceof Vector && rhs instanceof Vector){
+			resultObj = new Vector(result);
+		}else{
+			resultObj = null;
+		}
+		return resultObj;
+	}
+
+	public static LinAlg transpose(LinAlg matrix){
+		DFEVar[][] result = new DFEVar[matrix.nCols()][matrix.nRows()];
+		for(int i = 0; i < matrix.nRows(); i++){
+			for(int j = 0; j < matrix.nCols(); j++){
+				result[j][i] = matrix.data()[i][j];
+			}
+		}
+		LinAlg resultObj;
+		if(matrix instanceof Matrix){
+			resultObj = new Matrix(result);
+		}else if(matrix instanceof Vector){
+			resultObj = new Vector(result);
+		}else{
+			resultObj = null;
+		}
+		return resultObj;
+	}
+
+	public static LinAlg mux(DFEVar select, LinAlg[] options){
+		Kernel kernel = select.getKernel();
+		int nRows = options[0].nRows();
+		int nCols = options[0].nCols();
+		DFEVar[][][] optionsReshaped = new DFEVar[nRows][nCols][options.length];
+		for(int i = 0; i < options.length; i++){
+			for(int j = 0; j < nRows; j++){
+				for(int k = 0; k < nCols; k++){
+					optionsReshaped[j][k][i] = options[i].data()[j][k];
+				}
+			}
+		}
+		DFEVar result[][] = new DFEVar[nRows][nCols];
+		for(int i = 0; i < nRows; i++){
+			for(int j = 0; j < nCols; j++){
+				result[i][j] = kernel.control.mux(select, optionsReshaped[i][j]);
+			}
+		}
+		LinAlg resultObj;
+		if(options[0] instanceof Matrix){
+			resultObj = new Matrix(result);
+		}else if(options[0] instanceof Vector){
+			resultObj = new Vector(result);
+		}else{
+			return null;
+		}
+		return resultObj;
+	}
+
+    public void watch(String name){
+        for(int i = 0; i < nRows(); i++){
+            for(int j = 0; j < nCols(); j++){
+                this.data(i, j).simWatch(name+"_"+i+"_"+j);
+            }
+        }
+    }
+
+    public void print(){
+    	for(int i = 0; i < nRows(); i++){
+    		for(int j = 0; j < nCols(); j++){
+    			System.out.print(data(i, j) + "\t");
+    		}
+    		System.out.println();
+    	}
+    }
+}

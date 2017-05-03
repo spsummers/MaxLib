@@ -1,0 +1,27 @@
+package matrix;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class Scalar extends LinAlg{
+
+	public Scalar(DFEVar value){
+		super(value.getKernel());
+		DFEVar[][] data = new DFEVar[1][1];
+		data[0][0] = value;
+		this.data = data;
+	}
+
+	public Scalar(DFEVar[][] value){
+		super(value[0][0].getKernel());
+		if(value.length != 1 || value[0].length != 1){
+			System.err.println("Scalar: trying to create a scalar from non-scalar data");
+			this.data = null;
+		}else{
+			this.data = value;
+		}
+	}
+
+	public DFEVar value(){
+		return this.data[0][0];
+	}
+}

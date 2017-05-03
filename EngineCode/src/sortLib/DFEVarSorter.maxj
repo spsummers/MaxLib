@@ -1,0 +1,27 @@
+package sortLib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class DFEVarSorter extends Sorter<DFEVar>{
+	public DFEVarSorter(Kernel K, DFEVar[] x, boolean up){
+		super(K,x,up);
+	}
+
+	@Override
+	public void compare(int i, int j, boolean up) {
+		optimization.pushPipeliningFactor(0);
+		DFEVar GT;
+		DFEVar a = data[i];
+		DFEVar b = data[j];
+		if(up)
+			GT = a > b;
+		else
+			GT = b > a;
+		data[i] = GT ? a : b;
+		data[j] = GT ? b : a;
+		data[i] = optimization.pipeline(data[i]);
+		data[j] = optimization.pipeline(data[j]);
+		optimization.popPipeliningFactor();
+	}
+}

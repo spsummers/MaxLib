@@ -1,0 +1,125 @@
+package matrix;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class Matrix extends LinAlg{
+
+	public Matrix(Kernel owner){
+		super(owner);
+	}
+
+	public Matrix(Kernel owner, int nRows, int nCols){
+		super(owner, nRows, nCols);
+	}
+
+	public Matrix(DFEVar[][] data){
+		super(data);
+	}
+
+	public Matrix inverse(DFEType tDetInv, int detFracBits){
+		if(nCols() != 2 | nRows() != 2)
+			System.err.println("Can only invert 2x2 matrices.");
+		DFEVar[][] result = new DFEVar[2][2];
+		//DFEVar determinant = 1/((data()[0][0] * data()[1][1]) - (data()[0][1] * data()[1][0]));
+		//DFEVar invDet = determinantInv(tDetInv, detFracBits);
+		DFEVar invDet = 1/determinant();
+		result[0][0] = data()[1][1] * invDet;
+		result[1][1] = data()[0][0] * invDet;
+		result[0][1] = -data()[0][1] * invDet;
+		result[1][0] = -data()[1][0] * invDet;
+		return new Matrix(result);
+	}
+
+	public Matrix inverseNoDiv(){
+		if(nCols() != 2 | nRows() != 2)
+			System.err.println("Can only invert 2x2 matrices.");
+		DFEVar[][] result = new DFEVar[2][2];
+		result[0][0] = data()[1][1];
+		result[1][1] = data()[0][0];
+		result[0][1] = -data()[0][1];
+		result[1][0] = -data()[1][0];
+		return new Matrix(result);
+	}
+
+	public Matrix diagonalInverse(){
+		if(nCols() != 2 | nRows() != 2)
+			System.err.println("Can only invert 2x2 matrices.");
+		DFEVar[][] result = new DFEVar[2][2];
+		DFEVar inv00 = 1/data(0, 0);
+		DFEVar inv11 = 1/data(1, 1);
+		result[0][0] = inv00;
+		result[1][1] = inv11;
+		result[0][1] = constant.var(0);
+		result[1][0] = constant.var(0);
+		return new Matrix(result);
+	}
+
+	public DFEVar determinant(){
+		DFEVar x = (data(0, 0) * data(1, 1)) - (data(0, 1) * data(1, 0));
+		System.out.println("determinant " + x);
+		return x;
+	}
+
+	public DFEVar determinantInv(DFEType tXInv, int detFracBits){
+		DFEVar det = determinant();
+    	int nXBits = det.getType().getTotalBits();
+        int nXInvBits = tXInv.getTotalBits();
+        int xVal = 0;
+        int xMaxVal = (int) Math.pow(2, nXBits - 1) - 1;
+        int xMinVal = (int) - Math.pow(2, nXBits - 1);
+        int[] xInvLut = new int[(int)Math.pow(2, nXBits)];
+        for(int n = 0; n < Math.pow(2, nXBits); n++){
+            if(xVal == 0){
+                xInvLut[n] = (int) Math.pow(2, nXBits - 1) - 1;
+            }else{
+            	double xValFixP = xVal * Math.pow(2, -detFracBits);
+                double xInvVal = 1 / (xValFixP);
+                if(xInvVal > Math.pow(2, nXInvBits)-1)
+                    System.out.println("Got an xInvVal too big for assigned type: " + xInvVal + " > " + (Math.pow(2, nXInvBits)-1) );
+                xInvLut[n] = (int) xInvVal;
+            }
+            // Increment xVal until reaching maxVal, then go to negative values
+            // This ensures addressing by a twos complement number will work
+            if(xVal == xMaxVal){
+                xVal = xMinVal;
+            }else{
+                xVal++;
+            }
+        }
+        DFEVar[] rInvLutDFE = new DFEVar[(int) Math.pow(2, nXBits)];
+        for(int n = 0; n < Math.pow(2, nXBits); n++){
+            rInvLutDFE[n] = constant.var(tXInv, xInvLut[n]);
+        }
+        return control.mux(det.pack(), rInvLutDFE);
+
+	}
+
+	public Matrix toBits(){
+		DFEVar rawdata[][] = new DFEVar[nRows()][nCols()];
+		for(int i = 0; i < nRows(); i++){
+			for(int j = 0; j < nCols(); j++){
+				if(data[i][j].getType().isConcreteType()){
+					int nBits = this.data[i][j].getType().getTotalBits();
+					DFEType t = isSigned(data[i][j]) ? dfeInt(nBits) : dfeUInt(nBits);
+					rawdata[i][j] = this.data[i][j].cast(dfeRawBits(nBits)).cast(t);
+				}else{
+					rawdata[i][j] = this.data[i][j];
+				}
+			}
+		}
+		return new Matrix(rawdata);
+	}
+
+	private static boolean isSigned(DFEVar x){
+		Pattern p = Pattern.compile("TWOSCOMPLEMENT");
+		Matcher m = p.matcher(x.getType().toString());
+		return m.find();
+	}
+
+
+}

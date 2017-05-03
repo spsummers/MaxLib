@@ -1,0 +1,132 @@
+// A class containing functions to perform a bitonic sort on KernelObjects
+// The comparison function is left to the user to implement
+package sortLib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
+
+abstract public class Sorter<T extends KernelObject<T>> extends KernelLib{
+
+	public T[] data;
+	public boolean up;
+	private final Algorithm algo;
+	private int depth = 0;
+	private int maxDepth;
+
+	public enum Algorithm {
+		BITONIC, ODD_EVEN_MERGE
+	}
+
+	public Sorter(Kernel owner, T[] x, boolean up){
+		super(owner);
+		this.data = x;
+		this.up = up;
+		this.algo = Algorithm.BITONIC;
+	}
+
+	public Sorter(Kernel owner, T[] x, boolean up, Algorithm algo){
+		super(owner);
+		this.data = x;
+		this.up = up;
+		this.algo = algo;
+	}
+
+	public void sort(){
+		switch (this.algo){
+		case BITONIC:
+			this.maxDepth = (int)Math.ceil(nStagesBitonic());
+			bitonicSort(0,data.length,up);
+			break;
+		case ODD_EVEN_MERGE:
+			oddEvenMergeSort(0,data.length);
+			break;
+		}
+	}
+
+    public void merge(){
+        switch (this.algo){
+        case BITONIC:
+            bitonicMerge(0,data.length,up);
+            break;
+        case ODD_EVEN_MERGE:
+            break;
+        }
+    }
+
+	private void bitonicSort(int lo, int n, boolean up){
+		if(n > 1){
+			depth++;
+			int m = n/2;
+			bitonicSort(lo, m, !up);
+			bitonicSort(lo + m, n - m, up);
+			bitonicMerge(lo, n, up);
+			depth--;
+			//if(depth==1){
+			//	for(int j = 0; j < data.length; j++)
+			//		data[j] = data[j].getKernel().optimization.pipeline(data[j]);
+			//}
+		}
+	}
+
+	private void bitonicMerge(int lo, int n, boolean up){
+		if(n > 1){
+			depth++;
+			int m = floorPow2(n);
+			for(int i = lo; i < lo + n - m; i++){
+				depth++;
+				compare(i, i + m, up);
+			}
+			bitonicMerge(lo, m, up);
+			bitonicMerge(lo + m, n - m, up);
+			depth--;
+		}
+	}
+
+    /** sorts a piece of length n of the array
+     *  starting at position lo
+     */
+    private void oddEvenMergeSort(int lo, int n)
+    {
+        if (n>1)
+        {
+            int m=n/2;
+            oddEvenMergeSort(lo, m);
+            oddEvenMergeSort(lo+m, m);
+            oddEvenMerge(lo, n, 1);
+        }
+    }
+
+    /** lo is the starting position and
+     *  n is the length of the piece to be merged,
+     *  r is the distance of the elements to be compared
+     */
+    private void oddEvenMerge(int lo, int n, int r)
+    {
+        int m=r*2;
+        if (m<n)
+        {
+            oddEvenMerge(lo, n, m);      // even subsequence
+            oddEvenMerge(lo+r, n, m);    // odd subsequence
+            for (int i=lo+r; i+r<lo+n; i+=m)
+                compare(i, i+r, true);
+        }
+        else
+            compare(lo, lo+r, true);
+    }
+
+	abstract public void compare(int i, int j, boolean up);
+
+	private int floorPow2(int n){
+		int k = 1;
+		while(k < n)
+			k <<= 1;
+		return k>>1;
+	}
+
+	private double nStagesBitonic(){
+		int n = this.data.length;
+		return Math.ceil(Math.log(n)) * (Math.ceil(Math.log(n)) + 1)/2;
+	}
+}
+

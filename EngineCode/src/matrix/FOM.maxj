@@ -1,0 +1,112 @@
+package matrix;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Optimization;
+import com.maxeler.maxcompiler.v2.kernelcompiler.op_management.FixOpBitSizeMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.op_management.FixOpOffsetMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.op_management.MathOps;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class FOM{
+
+	FixOpBitSizeMode bm;
+	FixOpOffsetMode om;
+	MathOps ops;
+	boolean auto = false;
+	int nBits;
+	int nFracBits;
+
+	public FOM(){
+        auto = true;
+	}
+
+	public FOM(double max, int nBits, boolean signed){
+		int log2Max = (int) Math.ceil(Math.log(max) / Math.log(2)); // power of 2 needed to encode max
+		log2Max = signed ? log2Max + 1 : log2Max; // Need another bit if type is signed
+		int offs = log2Max - nBits;
+		bm = Optimization.bitSizeExact(nBits);
+		om = Optimization.offsetExact(offs);
+		this.nBits = nBits;
+		this.nFracBits = -offs;
+	}
+
+    public FOM(int nBits, int offs, MathOps ops){
+        bm = Optimization.bitSizeExact(nBits);
+        om = Optimization.offsetExact(offs);
+        this.ops = ops;
+        this.nBits = nBits;
+        this.nFracBits = -offs;
+    }
+
+    public FOM(FixOpBitSizeMode bm, FixOpOffsetMode om, MathOps ops){
+    	this.bm = bm;
+    	this.om = om;
+    	this.ops = ops;
+    }
+
+    public FOM(DFEType t){
+    	bm = Optimization.bitSizeExact(t.getTotalBits());
+    	om = Optimization.offsetExact(-((DFEFix)t).getFractionBits());
+    	nBits = t.getTotalBits();
+    	nFracBits = ((DFEFix)t).getFractionBits();
+    	ops = MathOps.ALL;
+    }
+
+    public static FOM maxTC(double max, int nBits){
+        return new FOM(max, nBits, true);
+    }
+
+    public static void popAll(Kernel k){
+        k.optimization.popFixOpMode(MathOps.ALL);
+    }
+
+    public static FOM noOver(int nBits){
+        FixOpBitSizeMode bm = Optimization.bitSizeExact(nBits);
+        FixOpOffsetMode om = Optimization.offsetNoOverflow();
+        return new FOM(bm, om, MathOps.ALL);
+    }
+
+    public void push(Kernel k){
+        if(!auto)
+            k.optimization.pushFixOpMode(bm, om, ops());
+    }
+
+    public void pop(Kernel k){
+    	if(!auto)
+    		k.optimization.popFixOpMode(ops());
+    }
+
+    public MathOps ops(){
+        MathOps ops = this.ops == null ? MathOps.ALL : this.ops;
+        return ops;
+    }
+
+    public DFEVar wrapProtectedCast(DFEVar x){
+    	double minVal = -Math.pow(2, nBits - nFracBits - 1);
+    	double maxVal = Math.pow(2, nBits - nFracBits - 1) - Math.pow(2, -nFracBits);
+    	//x.getKernel();
+		DFEVar xCast = x.cast(KernelLib.dfeFix(nBits-nFracBits, nFracBits, SignMode.TWOSCOMPLEMENT));
+    	DFEVar xL = x < minVal ? minVal : xCast;
+    	DFEVar xH = x > maxVal ? maxVal : xCast;
+    	DFEVar xWrapProtect = x < 0 ? xL : xH;
+    	return xWrapProtect;
+    }
+
+    public DFEVar cast(DFEVar x){
+    	return x.cast(KernelLib.dfeFix(nBits-nFracBits, nFracBits, SignMode.TWOSCOMPLEMENT));
+    }
+
+    public static DFEVar wrapProtect(DFEVar x, int nBits, int nFracBits){
+    	double minVal = -Math.pow(2, nBits - nFracBits - 1);
+    	double maxVal = Math.pow(2, nBits - nFracBits - 1) - Math.pow(2, -nFracBits);
+    	DFEVar xL = x < minVal ? minVal : x;
+    	DFEVar xH = x > maxVal ? maxVal : x;
+    	DFEVar xWrapProtect = x < 0 ? xL : xH;
+    	return xWrapProtect;
+    }
+
+}
