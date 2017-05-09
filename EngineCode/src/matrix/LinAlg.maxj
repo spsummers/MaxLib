@@ -4,7 +4,8 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 
-import treeLib.Tree;
+import maxpower.kernel.KernelBinaryOp.Add;
+import maxpower.utils.TreeReduce;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
@@ -98,8 +99,7 @@ public class LinAlg extends KernelLib{
 		// Sum the result
 		for(int i = 0; i < this.nRows(); i++){
 			for(int j = 0; j < rhs.nCols(); j++){
-				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
-				result[i][j] = tree.sum();
+				result[i][j] = TreeReduce.reduce(new Add<DFEVar>(), multiplierResults[i][j]);
 			}
 		}
 		LinAlg x;
@@ -141,8 +141,7 @@ public class LinAlg extends KernelLib{
 		for(int i = 0; i < this.nRows(); i++){
 			for(int j = 0; j < rhs.nCols(); j++){
                 fom[i][j].push(kernel);
-				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
-				result[i][j] = tree.sum();
+				result[i][j] = TreeReduce.reduce(new Add<DFEVar>(), multiplierResults[i][j]);
                 fom[i][j].pop(kernel);
 			}
 		}
@@ -185,8 +184,7 @@ public class LinAlg extends KernelLib{
 		for(int i = 0; i < this.nRows(); i++){
 			for(int j = 0; j < rhs.nCols(); j++){
                 //optimization.pushFixOpMode(Optimization.BitSizeLimit(bitSizeLimit), Optimization.OffsetNoOverflow(), MathOps.ADD);
-				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
-				result[i][j] = tree.sum();
+				result[i][j] = TreeReduce.reduce(new Add<DFEVar>(), multiplierResults[i][j]);
                 //optimization.popFixOpMode(MathOps.ADD);
 			}
 		}
@@ -238,8 +236,7 @@ public class LinAlg extends KernelLib{
 		// Sum the result
 		for(int i = 0; i < this.nRows(); i++){
 			for(int j = 0; j < rhs.nCols(); j++){
-				Tree tree = new Tree(this.kernel, multiplierResults[i][j]);
-				result[i][j] = tree.sum();
+				result[i][j] = TreeReduce.reduce(new Add<DFEVar>(), multiplierResults[i][j]);
 			}
 		}
 		LinAlg x;

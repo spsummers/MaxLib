@@ -1,4 +1,4 @@
-package sortLib;
+package sort;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;

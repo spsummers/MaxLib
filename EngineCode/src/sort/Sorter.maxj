@@ -1,6 +1,6 @@
 // A class containing functions to perform a bitonic sort on KernelObjects
 // The comparison function is left to the user to implement
-package sortLib;
+package sort;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
