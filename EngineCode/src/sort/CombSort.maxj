@@ -1,0 +1,157 @@
+package sort;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.SMIO;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Accumulator;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+public class CombSort extends KernelLib{
+
+	DFEType Tdata = dfeInt(32);
+	int maxSize = 1024;
+	int addrs = MathUtils.bitsToAddress(maxSize);
+	DFEType Taddr = dfeUInt(addrs);
+
+	private final DFEVar sortedData;
+	private final DFEVar writing;
+	private final DFEVar reading;
+
+	public CombSort(Kernel kernel, DFEVar streamIn, DFEVar validIn, DFEVar frameStart, DFEVar endFrame){
+		super(kernel);
+
+		// Initialise the memory and r/w pointers, and data
+		// Connect the pointers later
+		Memory<DFEVar> data = mem.alloc(Tdata, maxSize);
+		DFEVar readAddr = Taddr.newInstance(this); // The read address
+		DFEVar writeAddr = Taddr.newInstance(this);
+		DFEVar x = data.read(readAddr);
+		DFEVar writeEn = dfeUInt(1).newInstance(this); // Boolean write enable
+		DFEVar writeData = Tdata.newInstance(this);
+		data.write(writeAddr, writeData, writeEn);
+
+		// Initialise and connect the state machine
+		// SM controls whether reading/writing/sorting
+		SMIO modeSM = addStateMachine("modeSM", new CombSortSM(kernel, maxSize));
+		DFEVar sorting = modeSM.getOutput("sorting");
+		DFEVar writing = modeSM.getOutput("writing"); // Writing
+		DFEVar reading = modeSM.getOutput("reading");
+
+		// Address for writing new data
+		Count.Params wParams = control.count.makeParams(addrs).withEnable(writing & validIn).withReset(~writing);
+		Counter wCounter = control.count.makeCounter(wParams);
+		Count.Params rParams = control.count.makeParams(addrs).withEnable(reading).withReset(~reading);
+		Counter rCounter = control.count.makeCounter(rParams);
+
+		DFEVar size = Reductions.streamHold(wCounter.getCount(), writing & validIn);
+
+		// Address for sorting
+		DFEVar toggle0 = control.count.simpleCounter(1); // 1 bit counter to toggle left/right selection
+		DFEVar toggle1 = ~toggle0;
+		DFEVar gap = Taddr.newInstance(this);
+		Count.Params iParams = control.count.makeParams(addrs).withMax(stream.offset(size - gap + 1, -4)).withEnable(sorting & toggle0); // Counter for 'i' address
+
+		Counter iCounter = control.count.makeCounter(iParams);
+
+
+		DFEVar quarterGap = gap >> 2; // One quarter of the current gap value
+		DFEVar shrunkGap = gap - quarterGap; // Shrink factor of 1 + 1/3, computed efficiently
+		DFEVar nextGap = quarterGap === 0 ? (gap === 1 ? gap : gap - 1) : shrunkGap;
+		int gapCalcLatency = 3; // Latency of above calcs of next gap
+		DFEVar lastSorting = stream.offset(sorting, -1);
+		DFEVar startSort = (sorting & ~lastSorting) | ~sorting; // If sorting this cycle and not sorting last cycle, sorting just began
+		DFEVar midSort = sorting & lastSorting; // If sorting this cycle and last cycle, then are mid sort
+		optimization.pushPipeliningFactor(0);
+		DFEVar selNextGap = midSort & stream.offset(iCounter.getWrap(), -1);
+		optimization.popPipeliningFactor();
+		selNextGap = optimization.pipeline(selNextGap);
+		DFEVar gapSelect = startSort # selNextGap # (midSort & ~stream.offset(iCounter.getWrap(), -1));
+		DFEVar initGap = size - (size >> 2);
+		gap <== control.oneHotMux(gapSelect, stream.offset(gap, -1), stream.offset(nextGap, -4), initGap);
+
+		DFEVar lAddr = iCounter.getCount();
+		DFEVar rAddr = iCounter.getCount() + gap;
+		DFEVar sortingRAddr = toggle0 ? rAddr : lAddr; // Read/write address when mode is sorting
+		// Compare the data and swap if necessary
+		// Read one datum per clock, so second comparand is offset
+		DFEVar left = x;
+		DFEVar right = stream.offset(x, -1);
+		DFEVar swap = left < right;
+		DFEVar newLeft = swap ? right : left;
+		DFEVar newRight = swap ? left : right;
+		// Package the data into a single stream, selecting left then right
+		DFEVar swappedDataStream = toggle0 ? newLeft : stream.offset(newRight, -1); // TODO could be toggle0 depending on latency
+		int compareLatency = 4; // Latency of comparison
+		DFEVar sortingWAddr = stream.offset(sortingRAddr, -7);
+		DFEVar sortingWData = stream.offset(swappedDataStream, -6); // The data to write when sorting
+
+		// Is the data sorted?
+		// Add one to accumulator every time there is no swap
+		// Reset at the start of each sort iteration, and enable only when sorting
+		Accumulator.Params accumulatorParams = Reductions.accumulator.makeAccumulatorConfig(Taddr).withClear(iCounter.getWrap()).withEnable(stream.offset(sorting, -2));
+		DFEVar consecutiveNoSwaps = Reductions.accumulator.makeAccumulator(((~swap) & (~toggle0)).cast(Taddr), accumulatorParams);
+		DFEVar sorted = consecutiveNoSwaps === size;
+
+		// Now MUX the w/r address, data, and enables based on mode
+		writeData <== sorting ? sortingWData : streamIn;
+		writeAddr <== sorting ? sortingWAddr : wCounter.getCount();
+		writeEn <== (writing & validIn) | sorting;
+
+		readAddr <== sorting ? sortingRAddr : rCounter.getCount();
+
+		// Connect the control signals to the state machine
+		modeSM.connectInput("iEndFrame", stream.offset(endFrame, -6));
+		modeSM.connectInput("oEndFrame", stream.offset(rCounter.getCount() === size, -8));
+		modeSM.connectInput("sorted", stream.offset(sorted, -17));
+
+		this.sortedData = x;
+		this.writing = writing;
+		this.reading = reading;
+
+		writing.simWatch("writing");
+		sorting.simWatch("sorting");
+		reading.simWatch("reading");
+
+		lAddr.simWatch("lAddr");
+		rAddr.simWatch("rAddr");
+		readAddr.simWatch("readAddr");
+
+		gap.simWatch("gap");
+		x.simWatch("readData");
+		left.simWatch("left");
+		right.simWatch("right");
+		swap.simWatch("swap");
+		newLeft.simWatch("newLeft");
+		newRight.simWatch("newRight");
+		writeData.simWatch("writeData");
+		writeAddr.simWatch("writeAddr");
+		writeEn.simWatch("writeEn");
+
+		consecutiveNoSwaps.simWatch("consecutiveNoSwaps");
+		sorted.simWatch("sorted");
+		iCounter.getWrap().simWatch("iCounterWrap");
+		toggle0.simWatch("toggle0");
+		frameStart.simWatch("frameStart");
+		endFrame.simWatch("frameEnd");
+		size.simWatch("size");
+	}
+
+	public DFEVar receiving(){
+		return writing;
+	}
+
+	public DFEVar sending(){
+		return reading;
+	}
+
+	public DFEVar data(){
+		return sortedData;
+	}
+}
+

@@ -1,0 +1,62 @@
+package sort;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmInput;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmOutput;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmStateEnum;
+import com.maxeler.maxcompiler.v2.statemachine.kernel.KernelStateMachine;
+
+public class CombSortSM extends KernelStateMachine{
+	enum Modes{
+		SORTING, RECEIVING, SENDING
+	}
+	 // State
+	private final DFEsmStateEnum<Modes> mode;
+
+	// IO
+	private final DFEsmInput oEndFrame;
+	private final DFEsmInput iEndFrame;
+	private final DFEsmInput sorted;
+	private final DFEsmOutput receiving;
+	private final DFEsmOutput sorting;
+	private final DFEsmOutput sending;
+
+	public CombSortSM(Kernel kernel, int maxSize) {
+		super(kernel);
+		iEndFrame = io.input("iEndFrame", dfeBool());
+		oEndFrame = io.input("oEndFrame", dfeBool());
+		sorted = io.input("sorted", dfeBool());
+		receiving = io.output("writing", dfeBool());
+		sorting = io.output("sorting", dfeBool());
+		sending = io.output("reading", dfeBool());
+		mode = state.enumerated(Modes.class, Modes.RECEIVING);
+	}
+
+	@Override
+	protected void outputFunction(){
+		receiving <== mode === Modes.RECEIVING;
+		sorting <== mode === Modes.SORTING;
+		sending <== mode === Modes.SENDING;
+	}
+
+	@Override
+	protected void nextState(){
+		SWITCH(mode){
+			CASE(Modes.RECEIVING){
+				IF(iEndFrame === 1){
+					mode.next <== Modes.SORTING;
+				}
+			}
+			CASE(Modes.SORTING){
+				IF(sorted){
+					mode.next <== Modes.SENDING;
+				}
+			}
+			CASE(Modes.SENDING){
+				IF(oEndFrame === 1){
+					mode.next <== Modes.RECEIVING;
+				}
+			}
+		}
+	}
+}
