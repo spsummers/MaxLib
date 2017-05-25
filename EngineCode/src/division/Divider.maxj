@@ -5,10 +5,12 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Optimization;
 import com.maxeler.maxcompiler.v2.kernelcompiler.op_management.MathOps;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Bitops;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.FloatingPoint;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.KernelMath;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFloat;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar.Radix;
@@ -31,113 +33,17 @@ public class Divider extends KernelLib{
 		Divider div = new Divider(x.getKernel());
 		if(simWatch)
 			div.setSimWatch("div");
-		return div.reducedLUTDivide2(x, 11, 7, 25, 25);
+		return div.reducedLUTDivide(x, 11, 7, 25, 25);
 	}
 
 	public static DFEVar divInt18_1BRAM_2DSP(DFEVar x){
 		Divider div = new Divider(x.getKernel());
 		if(simWatch)
 			div.setSimWatch("div");
-		return div.reducedLUTDivide2(x, 11, 7, 35, 35);
+		return div.reducedLUTDivide(x, 11, 7, 35, 35);
 	}
 
-	/*public DFEVar reducedLUTDivide(DFEVar x, int nHighBits, int nLowBits, int nInvBits, int nOutputBits){
-		optimization.pushEnableBitGrowth(true);
-		int nLowBitsInt = this.signed ? nLowBits - 1 : nLowBits; // Because the sign bit will go
-		int nTotalBits = nHighBits + nLowBitsInt;
-		int nTotalBitsInv = this.signed ? nTotalBits : nTotalBits + 1;
-		DFEVar positive = x > 0;
-		DFEVar absX = x;
-		if(this.signed){
-			absX = KernelMath.abs(x).cast(dfeRawBits(x.getType().getTotalBits())).slice(0, nTotalBits).cast(dfeUInt(nTotalBits));
-		}
-		optimization.pushPipeliningFactor(0);
-		DFEVar leading1 = Bitops.onehotDecode(Bitops.leading1Detect(absX));
-		optimization.pipeline(leading1);
-		optimization.popPipeliningFactor();
-		DFEVar nShift = (nTotalBits - 1 - leading1).cast(dfeUInt(leading1.getType().getTotalBits()));
-		optimization.pushPipeliningFactor(0.6);
-		DFEVar shiftedX = absX.shiftLeft(nShift); // The value to be divided shifted up s.t. MSB is '1'
-		optimization.popPipeliningFactor();
-		DFEVar xHigh = shiftedX.slice(nLowBitsInt, nHighBits);
-		DFEVar xHighLessOne = shiftedX.slice(nLowBitsInt, nHighBits - 1); // As MSB is always '1' after shift
-		DFEVar xHighUInt = (xHigh # constant.var(dfeRawBits(nLowBitsInt), 0)).cast(dfeUInt(nHighBits + nLowBitsInt));
-		DFEVar xLow = shiftedX.slice(0, nLowBitsInt).cast(dfeUInt(nLowBitsInt));
-		DFEVar xDiff = (xHighUInt - xLow);//.cast(dfeUInt(nTotalBits));
-
-		// Make the loop up table
-		int nLUTVals = (int) Math.pow(2, nHighBits - 1);
-		double[] xHighInvSquaredVals = new double[nLUTVals];
-		//double maxVal = (Math.pow(2, -2 * nTotalBitsInv) - Math.pow(2, - 3 * nTotalBitsInv)) * Math.pow(2, 3 * nTotalBitsInv);
-		double maxVal = Math.pow(2, nTotalBitsInv) - Math.pow(2, (nInvBits - nTotalBitsInv - 1));
-		for(int n = 0; n < nLUTVals; n++){
-			double xValue = Math.pow(2, nHighBits + nLowBitsInt) + n * Math.pow(2, nLowBitsInt);
-			//System.out.println(n + "," + xValue);
-			double xSquared = Math.pow(xValue, 2);
-			xHighInvSquaredVals[n] = (1 / xSquared) * Math.pow(2, 3 * nTotalBitsInv);
-			if(n == 0){
-				xHighInvSquaredVals[n] = maxVal;
-			}
-			if(xHighInvSquaredVals[n] > maxVal){
-				System.out.println("n = "+n+", 1/" + xSquared +" = "+ xHighInvSquaredVals[n] + ", maxVal = " + maxVal);
-			}
-
-		}
-		DFEType tXHighInvSquared = dfeFix(nTotalBitsInv, (nInvBits - nTotalBitsInv), SignMode.UNSIGNED);
-		Memory<DFEVar> xHighInvSquaredLUT = mem.alloc(tXHighInvSquared, nLUTVals);
-		xHighInvSquaredLUT.setContents(xHighInvSquaredVals);
-		DFEVar xHighInvSquared = xHighInvSquaredLUT.read(xHighLessOne).cast(dfeFix(nTotalBitsInv, (nInvBits - nTotalBitsInv), SignMode.TWOSCOMPLEMENT));
-		if(nInvBits + 1 < 25)
-			Bitops.padSignExtend(xHighInvSquared, 25 - (1 + nInvBits));
-
-
-
-		//optimization.pushFixOpMode(Optimization.bitSizeExact(nTotalBits), Optimization.offsetNoOverflow(), MathOps.MUL);
-		optimization.pushPipeliningFactor(0.6);
-		DFEVar invX = (xDiff * xHighInvSquared);//.cast(dfeRawBits(18)).cast(dfeUInt(nTotalBits));
-		optimization.popPipeliningFactor();
-		//optimization.popFixOpMode(MathOps.MUL);
-		DFEVar invXBiggerContainer = invX.cast(dfeFix((3 * nTotalBitsInv), (nInvBits - nTotalBitsInv), SignMode.UNSIGNED));
-		DFEVar invXShift = invXBiggerContainer.shiftLeft(nShift + 2);//.cast(dfeRawBits()).slice(nTotalBits, nTotalBits).cast(dfeFix(0, nTotalBits, SignMode.UNSIGNED));
-		int nFinalBits = invXShift.getType().getTotalBits();
-		invXShift = invXShift.cast(dfeRawBits(nFinalBits)).slice((nFinalBits - nOutputBits), nOutputBits).cast(dfeFix(nOutputBits, 0, SignMode.UNSIGNED));
-		DFEVar invXShiftSigned;
-		if(this.signed){
-			DFEVar invXShiftMinusLSB = (constant.var(dfeRawBits(1), 0) # invXShift.slice(1, nOutputBits - 1)).cast(dfeFix(1, nOutputBits - 1, SignMode.TWOSCOMPLEMENT));
-			invXShiftSigned = positive ? invXShiftMinusLSB : - invXShiftMinusLSB;
-		}else{
-			invXShiftSigned = invXShift;
-		}
-		optimization.popEnableBitGrowth();
-
-		if(verbose){
-			System.out.println("tXHighInvSquared: " + tXHighInvSquared);
-			System.out.println("xDiff: " + xDiff);
-			System.out.println("xHighInvSquared: " + xHighInvSquared);
-			System.out.println("xDiff: " + xDiff);
-			System.out.println("xHighInvSquared: " + xHighInvSquared);
-			System.out.println("invX: " + invX);
-			System.out.println("invXBiggerContainer: " + invXBiggerContainer);
-			System.out.println("invXShift: " + invXShift.getType().getTotalBits());
-		}
-		if(simWatch){
-			x.simWatch(simWatchPrefix+"_x");
-			positive.simWatch(simWatchPrefix+"_x_positive");
-			nShift.simWatch(simWatchPrefix+"_nShift");
-			xHigh.simWatch(simWatchPrefix+"_xHigh");
-			xLow.simWatch(simWatchPrefix+"_xLow");
-			xDiff.simWatch(simWatchPrefix+"_xDiff");
-			xHighLessOne.simWatch(simWatchPrefix+"_xInvAddr");
-			xHighInvSquared.simWatch(simWatchPrefix+"_xHighInvSquared");
-			xHighInvSquared.simWatch(simWatchPrefix+"_xHighInvSquaredBits", Radix.BINARY);
-			invX.simWatch(simWatchPrefix+"_invX");
-			invXShift.simWatch(simWatchPrefix+"_invXShifted", Radix.BINARY);
-            invXShiftSigned.simWatch(simWatchPrefix+"_invXShiftedSigned");
-		}
-		return invXShiftSigned;
-	}*/
-
-	public DFEVar reducedLUTDivide2(DFEVar x, int nHighBits, int nLowBits, int nInvBits, int nOutputBits){
+	public DFEVar reducedLUTDivide(DFEVar x, int nHighBits, int nLowBits, int nInvBits, int nOutputBits){
 		optimization.pushEnableBitGrowth(true);
 		int nInBits = x.getType().getTotalBits();
 		DFEVar positive = x > 0;
@@ -303,6 +209,71 @@ public class Divider extends KernelLib{
 			//xInvShift.simWatch(simWatchPrefix+"_invXShifted", Radix.BINARY);
 		}
 		return xInvShift;
+	}
+
+	/**
+	 * Reduced LUT division for floating point DFEVars
+	 * Similar to fixed point implementation
+	 * but skips pre & post shift due to floating point renormalisation
+	 * @param x The number to invert
+	 * @return 1/x
+	 */
+	public static DFEVar reducedLUTDivideFloat(DFEVar x, int nHighBits){
+		Kernel k = x.getKernel();
+
+		DFEFloat xType = (DFEFloat) x.getType();
+		int nLowBits = xType.getMantissaBits() - nHighBits;
+
+		DFEVar xMan = FloatingPoint.getMantissa(x);
+		DFEVar xExp = FloatingPoint.getExponentBits(x).cast(dfeUInt(xType.getExponentBits()));
+		DFEVar xSign = FloatingPoint.getSignBit(x);
+
+		DFEVar xL = xMan.slice(0, nLowBits).cast(dfeUInt(nLowBits));
+		DFEVar xH = (xMan.slice(nLowBits, nHighBits) # k.constant.var(dfeRawBits(nLowBits), 0)).cast(dfeUInt(xType.getMantissaBits()));
+		DFEVar xH0 = xMan.slice(nLowBits, nHighBits - 1);
+
+		k.optimization.pushEnableBitGrowth(true);
+		DFEVar xDiff = xH - xL;
+		k.optimization.popEnableBitGrowth();
+
+		// Fill the look up table with 1 / xH^2 values, assuming the implicit 1 at MSB
+		double maxVal = 1/Math.pow(Math.pow(2, xType.getMantissaBits() - 1), 2); // = 1/min(xH)^2
+		DFEType txInvSq = dfeFixMax(xType.getMantissaBits() + 1, maxVal, SignMode.TWOSCOMPLEMENT);
+		System.out.println("tXInvSq = " + txInvSq);
+		int nLUTBits = (int) Math.pow(2, xH0.getType().getTotalBits());
+
+		Memory<DFEVar> xHInvLUT = k.mem.alloc(txInvSq, nLUTBits);
+		double xInvVals[] = new double[nLUTBits];
+		for(int n = 0; n < nLUTBits; n++){
+			double xVal = (n + Math.pow(2, nHighBits - 1)) * Math.pow(2, nLowBits);
+			xInvVals[n] = 1 / (xVal * xVal);
+		}
+		xHInvLUT.setContents(xInvVals);
+
+		DFEVar xInvSq = xHInvLUT.read(xH0);
+		k.optimization.pushEnableBitGrowth(true);
+		// Because we left xDiff, xInvSq as twos complement, but they are really unsigned
+		// we have some leading 0s to remove to retain best precision
+		k.optimization.pushFixOpMode(Optimization.bitSizeExact(xType.getMantissaBits() + 3), Optimization.offsetNoOverflow(), MathOps.MUL);
+		DFEVar xInv = xDiff * xInvSq;
+		k.optimization.popFixOpMode(MathOps.MUL);
+		k.optimization.popEnableBitGrowth();
+
+		int xInvBits = xInv.getType().getTotalBits();
+		DFEVar xInvCast = xInv.cast(dfeRawBits(xInvBits)).slice(xInvBits - xType.getMantissaBits() - 2, xType.getMantissaBits());
+
+		// Set the new exponent
+		// N.B. here we manipulate the biased exponent
+		k.optimization.pushFixOpMode(Optimization.bitSizeExact(xType.getExponentBits()), Optimization.offsetExact(0), MathOps.SUB);
+		DFEVar newXExp = (2 * xType.getExponentBias() -1 ) - xExp;
+		// If mantissa == 0 (i.e. x is power of 2) we must add 1 back
+		//newXExp += (xMan === 0) ? 1 : 0; // Find the conditional arithmetic enable for this
+		newXExp = xMan === 0 ? newXExp + 1 : newXExp;
+ 		k.optimization.popFixOpMode(MathOps.SUB);
+
+		// Pack the sign, exponent and mantissa, slicing away the implicit MSB = 1
+		DFEVar result = (xSign # newXExp # xInvCast.slice(0, xType.getMantissaBits() - 1)).cast(xType);
+		return result;
 	}
 
     public DFEVar LUTdivide(DFEVar x, int nInvBits){
