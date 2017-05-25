@@ -7,7 +7,16 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
+import division.Inverter;
+
 public class Matrix extends LinAlg{
+
+	private static Inverter inverter = new Inverter(){
+		public DFEVar invert(DFEVar x) {
+			return 1 / x;
+		}
+
+	};
 
 	public Matrix(Kernel owner){
 		super(owner);
@@ -21,13 +30,13 @@ public class Matrix extends LinAlg{
 		super(data);
 	}
 
-	public Matrix inverse(DFEType tDetInv, int detFracBits){
+	public Matrix inverse(){
 		if(nCols() != 2 | nRows() != 2)
 			System.err.println("Can only invert 2x2 matrices.");
 		DFEVar[][] result = new DFEVar[2][2];
 		//DFEVar determinant = 1/((data()[0][0] * data()[1][1]) - (data()[0][1] * data()[1][0]));
 		//DFEVar invDet = determinantInv(tDetInv, detFracBits);
-		DFEVar invDet = 1/determinant();
+		DFEVar invDet = inverter.invert(determinant());
 		result[0][0] = data()[1][1] * invDet;
 		result[1][1] = data()[0][0] * invDet;
 		result[0][1] = -data()[0][1] * invDet;
@@ -121,5 +130,19 @@ public class Matrix extends LinAlg{
 		return m.find();
 	}
 
+	public Matrix add(Matrix rhs){
+		return (Matrix) ((LinAlg)this).add(rhs);
+	}
 
+	public Matrix sub(Matrix rhs){
+		return (Matrix) ((LinAlg)this).sub(rhs);
+	}
+
+	public static void setInversionAlgorithm(Inverter i){
+		inverter = i;
+	}
+
+	public static Inverter getInversionAlgorithm(){
+		return inverter;
+	}
 }

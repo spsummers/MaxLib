@@ -55,4 +55,12 @@ public class Vector extends Matrix{
 		}
 	}
 
+	public Vector add(Vector rhs){
+		return (Vector) ((LinAlg)this).add(rhs);
+	}
+
+	public Vector sub(Vector rhs){
+		return (Vector) ((LinAlg) this).sub(rhs);
+	}
+
 }

@@ -263,7 +263,7 @@ public class LinAlg extends KernelLib{
 				result[i][j] = this.data()[i][j] - rhs.data()[i][j];
 			}
 		}
-		LinAlg resultObj;
+		/*LinAlg resultObj;
 		if(this instanceof Matrix && rhs instanceof Matrix){
 			if(result.length == 1 || result[0].length == 1)
 				resultObj = new Vector(result);
@@ -274,7 +274,16 @@ public class LinAlg extends KernelLib{
 		}else{
 			resultObj = null;
 		}
-		return resultObj;
+		return resultObj;*/
+		return new LinAlg(result);
+	}
+
+	public void isub(LinAlg rhs){
+		for(int i = 0; i < this.nRows(); i++){
+			for(int j = 0; j < this.nCols(); j++){
+				this.data()[i][j] -= rhs.data()[i][j];
+			}
+		}
 	}
 
 	public LinAlg subFOM(LinAlg rhs, FOM[][] fom){
