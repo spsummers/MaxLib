@@ -239,7 +239,6 @@ public class Divider extends KernelLib{
 		// Fill the look up table with 1 / xH^2 values, assuming the implicit 1 at MSB
 		double maxVal = 1/Math.pow(Math.pow(2, xType.getMantissaBits() - 1), 2); // = 1/min(xH)^2
 		DFEType txInvSq = dfeFixMax(xType.getMantissaBits() + 1, maxVal, SignMode.TWOSCOMPLEMENT);
-		System.out.println("tXInvSq = " + txInvSq);
 		int nLUTBits = (int) Math.pow(2, xH0.getType().getTotalBits());
 
 		Memory<DFEVar> xHInvLUT = k.mem.alloc(txInvSq, nLUTBits);
@@ -266,13 +265,14 @@ public class Divider extends KernelLib{
 		// N.B. here we manipulate the biased exponent
 		k.optimization.pushFixOpMode(Optimization.bitSizeExact(xType.getExponentBits()), Optimization.offsetExact(0), MathOps.SUB);
 		DFEVar newXExp = (2 * xType.getExponentBias() -1 ) - xExp;
-		// If mantissa == 0 (i.e. x is power of 2) we must add 1 back
-		//newXExp += (xMan === 0) ? 1 : 0; // Find the conditional arithmetic enable for this
-		newXExp = xMan === 0 ? newXExp + 1 : newXExp;
+		// If mantissa == 1 (i.e. x is power of 2) we must add 1 back to exponent
+		newXExp = xMan === 1 ? newXExp + 1 : newXExp;
  		k.optimization.popFixOpMode(MathOps.SUB);
 
 		// Pack the sign, exponent and mantissa, slicing away the implicit MSB = 1
 		DFEVar result = (xSign # newXExp # xInvCast.slice(0, xType.getMantissaBits() - 1)).cast(xType);
+		xExp.simWatch("exponent");
+		newXExp.simWatch("new_exponent");
 		return result;
 	}
 
