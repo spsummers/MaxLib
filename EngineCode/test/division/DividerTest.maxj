@@ -10,12 +10,26 @@ import org.junit.Test;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
 public class DividerTest {
+
+	private static class FixedPointReciprocalKernel extends Kernel{
+		public FixedPointReciprocalKernel(KernelParameters params, DFEType t){
+			super(params);
+
+			DFEVar x = io.input("x", t);
+			DFEVar y = Divider.reducedLUTDivide(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits());
+			io.output("y", y, y.getType());
+			System.out.println(y.getType());
+		}
+	}
 
 	private static class ReciprocalKernel extends Kernel{
 
@@ -31,37 +45,30 @@ public class DividerTest {
 
 	private static final int numRandom = 100;
 
-	@Test public void test9() { test(9);  }
-	@Test public void test10(){ test(10); }
-	@Test public void test11(){ test(11); }
+	@Test public void testFixP_8_8(){ testFixedP(8, 8); }
+	@Test public void testFixP_16_16(){ testFixedP(16, 16); }
+	@Test public void testFixP_1_24(){ testFixedP(1, 24); }
 
-	public void test(int nLUTBits) {
+	public void testFixedP(int nIntBits, int nFracBits){
+		DFEType t = DFETypeFactory.dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
 		SimulationManager m = new SimulationManager("Reciprocal_master");
+		FixedPointReciprocalKernel kernel = new FixedPointReciprocalKernel(m.makeKernelParameters(), t);
+		m.setKernel(kernel);
+		m.build();
+		double max = ((DFEFix)t).getMax();
+		double tol = max * Math.pow(2.0, -14);
+		runTest(m, t, tol);
+	}
 
-		long seed = System.currentTimeMillis();
-		Random rng = new Random(seed);
+	//@Test public void test9() { testFloatP(9);  }
+	//@Test public void test10(){ testFloatP(10); }
+	//@Test public void test11(){ testFloatP(11); }
+
+	public void testFloatP(int nLUTBits){
+		SimulationManager m = new SimulationManager("Reciprocal_master");
 		ReciprocalKernel kernel = new ReciprocalKernel(m.makeKernelParameters(), nLUTBits);
 		m.setKernel(kernel);
 		m.build();
-		m.logMsg("Using random seed: %d", seed);
-
-
-		int totalCycles = numRandom;
-		List<Bits> input = new ArrayList<Bits>();
-
-
-		List<Double> scalarExpected = new ArrayList<Double>(totalCycles);
-
-		for (int i = 0; i < numRandom; i++) {
-			Double value = 1.0 + rng.nextDouble();
-			input.add(kernel.t.encodeConstant(value));
-			scalarExpected.add(1.0/value);
-		}
-
-	    m.setInputDataRaw("x", input);
-		m.setKernelCycles(numRandom);
-		m.run();
-
 		double tol;
 		switch(nLUTBits){
 			case 9:
@@ -73,6 +80,37 @@ public class DividerTest {
 			default:
 				tol = Math.pow(2.0, -21);
 		}
+		runTest(m, kernel.t, tol);
+	}
+
+	public void runTest(SimulationManager m, DFEType t, double tol) {
+
+		long seed = System.currentTimeMillis();
+		Random rng = new Random(seed);
+		m.logMsg("Using random seed: %d", seed);
+		int totalCycles = numRandom;
+		List<Bits> input = new ArrayList<Bits>();
+
+		List<Double> scalarExpected = new ArrayList<Double>(totalCycles);
+
+		double max = 2.;
+		double min = 1.;
+		if(t instanceof DFEFix){
+			max = ((DFEFix) t).getMax();
+			if(((DFEFix) t).getSignMode() == SignMode.TWOSCOMPLEMENT)
+				min = -max;
+			else
+				min = 0;
+		}
+		for (int i = 0; i < numRandom; i++) {
+			Double value = min + rng.nextDouble() * (max - min);
+			input.add(t.encodeConstant(value));
+			scalarExpected.add(1.0/value);
+		}
+
+	    m.setInputDataRaw("x", input);
+		m.setKernelCycles(numRandom);
+		m.run();
 
 		for (int i = 0; i < totalCycles; i++) {
 			assertEquals(scalarExpected[i], m.getOutputData("y")[i], tol);
