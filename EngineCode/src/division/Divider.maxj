@@ -218,19 +218,20 @@ public class Divider extends KernelLib{
 	 * @param x The number to invert
 	 * @return 1/x
 	 */
-	public static DFEVar reducedLUTDivideFloat(DFEVar x, int nHighBits){
+	public static DFEVar reducedLUTDivideFloat(DFEVar x, int nLUTBits){
 		Kernel k = x.getKernel();
 
 		DFEFloat xType = (DFEFloat) x.getType();
-		int nLowBits = xType.getMantissaBits() - nHighBits;
+		int nLowBits = xType.getMantissaBits() - nLUTBits - 1; // -1 since getMantissaBits() includes the implicit 1
 
-		DFEVar xMan = FloatingPoint.getMantissa(x);
+		//DFEVar xMan = FloatingPoint.getMantissa(x);
+		DFEVar xMan = FloatingPoint.getMantissaBits(x);
 		DFEVar xExp = FloatingPoint.getExponentBits(x).cast(dfeUInt(xType.getExponentBits()));
 		DFEVar xSign = FloatingPoint.getSignBit(x);
 
 		DFEVar xL = xMan.slice(0, nLowBits).cast(dfeUInt(nLowBits));
-		DFEVar xH = (xMan.slice(nLowBits, nHighBits) # k.constant.var(dfeRawBits(nLowBits), 0)).cast(dfeUInt(xType.getMantissaBits()));
-		DFEVar xH0 = xMan.slice(nLowBits, nHighBits - 1);
+		DFEVar xH = (k.constant.var(dfeRawBits(1), 1) # xMan.slice(nLowBits, nLUTBits) # k.constant.var(dfeRawBits(nLowBits), 0)).cast(dfeUInt(xType.getMantissaBits()));
+		DFEVar xH0 = xMan.slice(nLowBits, nLUTBits); // LUT accounts for implicit 1
 
 		k.optimization.pushEnableBitGrowth(true);
 		DFEVar xDiff = xH - xL;
@@ -239,12 +240,12 @@ public class Divider extends KernelLib{
 		// Fill the look up table with 1 / xH^2 values, assuming the implicit 1 at MSB
 		double maxVal = 1/Math.pow(Math.pow(2, xType.getMantissaBits() - 1), 2); // = 1/min(xH)^2
 		DFEType txInvSq = dfeFixMax(xType.getMantissaBits() + 1, maxVal, SignMode.TWOSCOMPLEMENT);
-		int nLUTBits = (int) Math.pow(2, xH0.getType().getTotalBits());
+		int nLUTVals = (int) Math.pow(2, xH0.getType().getTotalBits());
 
-		Memory<DFEVar> xHInvLUT = k.mem.alloc(txInvSq, nLUTBits);
-		double xInvVals[] = new double[nLUTBits];
-		for(int n = 0; n < nLUTBits; n++){
-			double xVal = (n + Math.pow(2, nHighBits - 1)) * Math.pow(2, nLowBits);
+		Memory<DFEVar> xHInvLUT = k.mem.alloc(txInvSq, nLUTVals);
+		double xInvVals[] = new double[nLUTVals];
+		for(int n = 0; n < nLUTVals; n++){
+			double xVal = (n + Math.pow(2, nLUTBits)) * Math.pow(2, nLowBits);
 			xInvVals[n] = 1 / (xVal * xVal);
 		}
 		xHInvLUT.setContents(xInvVals);
@@ -264,15 +265,13 @@ public class Divider extends KernelLib{
 		// Set the new exponent
 		// N.B. here we manipulate the biased exponent
 		k.optimization.pushFixOpMode(Optimization.bitSizeExact(xType.getExponentBits()), Optimization.offsetExact(0), MathOps.SUB);
-		DFEVar newXExp = (2 * xType.getExponentBias() -1 ) - xExp;
+		DFEVar newXExp = (2 * xType.getExponentBias() - 1) - xExp;
 		// If mantissa == 1 (i.e. x is power of 2) we must add 1 back to exponent
-		newXExp = xMan === 1 ? newXExp + 1 : newXExp;
+		newXExp = (xMan === 1)? newXExp + 1 : newXExp;
  		k.optimization.popFixOpMode(MathOps.SUB);
 
 		// Pack the sign, exponent and mantissa, slicing away the implicit MSB = 1
 		DFEVar result = (xSign # newXExp # xInvCast.slice(0, xType.getMantissaBits() - 1)).cast(xType);
-		xExp.simWatch("exponent");
-		newXExp.simWatch("new_exponent");
 		return result;
 	}
 
