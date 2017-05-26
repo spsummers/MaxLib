@@ -1,0 +1,81 @@
+package division;
+
+import static org.junit.Assert.assertEquals;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import org.junit.Test;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class DividerTest {
+
+	private static class ReciprocalKernel extends Kernel{
+
+		public static DFEType t = dfeFloat(8, 24);
+		public ReciprocalKernel(KernelParameters params, int nLUTBits){
+			super(params);
+
+			DFEVar x = io.input("x", t);
+			DFEVar y = Divider.reducedLUTDivideFloat(x, nLUTBits);
+			io.output("y", y, y.getType());
+		}
+	}
+
+	private static final int numRandom = 100;
+
+	@Test public void test9() { test(9);  }
+	@Test public void test10(){ test(10); }
+	@Test public void test11(){ test(11); }
+
+	public void test(int nLUTBits) {
+		SimulationManager m = new SimulationManager("Reciprocal_master");
+
+		long seed = System.currentTimeMillis();
+		Random rng = new Random(seed);
+		ReciprocalKernel kernel = new ReciprocalKernel(m.makeKernelParameters(), nLUTBits);
+		m.setKernel(kernel);
+		m.build();
+		m.logMsg("Using random seed: %d", seed);
+
+
+		int totalCycles = numRandom;
+		List<Bits> input = new ArrayList<Bits>();
+
+
+		List<Double> scalarExpected = new ArrayList<Double>(totalCycles);
+
+		for (int i = 0; i < numRandom; i++) {
+			Double value = 1.0 + rng.nextDouble();
+			input.add(kernel.t.encodeConstant(value));
+			scalarExpected.add(1.0/value);
+		}
+
+	    m.setInputDataRaw("x", input);
+		m.setKernelCycles(numRandom);
+		m.run();
+
+		double tol;
+		switch(nLUTBits){
+			case 9:
+				tol = Math.pow(2.0, -19);
+			case 10:
+				tol = Math.pow(2.0, -20);
+			case 11:
+				tol = Math.pow(2.0, -21);
+			default:
+				tol = Math.pow(2.0, -21);
+		}
+
+		for (int i = 0; i < totalCycles; i++) {
+			assertEquals(scalarExpected[i], m.getOutputData("y")[i], tol);
+		}
+	}
+}
