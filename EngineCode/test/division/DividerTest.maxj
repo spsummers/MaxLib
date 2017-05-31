@@ -23,7 +23,6 @@ public class DividerTest {
 	private static class FixedPointReciprocalKernel extends Kernel{
 		public FixedPointReciprocalKernel(KernelParameters params, DFEType t){
 			super(params);
-
 			DFEVar x = io.input("x", t);
 			DFEVar y = Divider.reducedLUTDivide(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits());
 			io.output("y", y, y.getType());

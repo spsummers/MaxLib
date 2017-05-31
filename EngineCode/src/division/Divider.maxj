@@ -27,13 +27,13 @@ public class Divider extends KernelLib{
 		super(owner);
 	}
 
-	public static DFEVar reciprocal(DFEVar x){
+	/*public static DFEVar reciprocal(DFEVar x){
 		if(x.getType() instanceof DFEFloat){
 			return reducedLUTDivideFloat(x, 10);
 		}else{
 			throw new IllegalArgumentException("Only float and fixed point types are supported.");
 		}
-	}
+	}*/
 
 	public static DFEVar divInt18_1BRAM_1DSP(DFEVar x){
 		return reducedLUTDivide(x, 11, 7, 25, 25);
@@ -144,17 +144,39 @@ public class Divider extends KernelLib{
 	}
 
 	/**
+	 * Experimental: cast fixed to float and used floating point reciprocal
+	 * @param x
+	 * @param nLUTAddrBits
+	 * @param nLUTDataBits
+	 * @return
+	 */
+	public static DFEVar reducedLUTDivideFixedViaFloat(DFEVar x, int nLUTAddrBits, int nLUTDataBits){
+		//int expBits = 8;//MathUtils.bitsToAddress(x.getType().getTotalBits());
+		DFEType tDenom = DFETypeFactory.dfeFloat(8, 24);
+		DFEVar xFloat = x.cast(tDenom);
+		DFEVar xFloatInv = reducedLUTDivideFloat(xFloat, nLUTAddrBits, nLUTDataBits);
+		DFEType tInv = fixedpointReciprocalReturnType(x, x.getType().getTotalBits(), 0);
+		DFEVar xInv = xFloatInv.cast(tInv);
+
+		xFloat.simWatch("xFloat");
+		xFloatInv.simWatch("xFloatInv");
+		xInv.simWatch("xFixedInv");
+
+		return xInv;
+	}
+
+	/**
 	 * Reduced LUT division for floating point DFEVars
 	 * Similar to fixed point implementation
 	 * but skips pre & post shift due to floating point renormalisation
 	 * @param x The number to invert
 	 * @return 1/x
 	 */
-	public static DFEVar reducedLUTDivideFloat(DFEVar x, int nLUTBits){
+	public static DFEVar reducedLUTDivideFloat(DFEVar x, int nLUTAddrBits, int nLUTDataBits){
 		Kernel k = x.getKernel();
 
 		DFEFloat xType = (DFEFloat) x.getType();
-		int nLowBits = xType.getMantissaBits() - nLUTBits - 1; // -1 since getMantissaBits() includes the implicit 1
+		int nLowBits = xType.getMantissaBits() - nLUTAddrBits - 1; // -1 since getMantissaBits() includes the implicit 1
 
 		//DFEVar xMan = FloatingPoint.getMantissa(x);
 		DFEVar xMan = FloatingPoint.getMantissaBits(x);
@@ -162,8 +184,8 @@ public class Divider extends KernelLib{
 		DFEVar xSign = FloatingPoint.getSignBit(x);
 
 		DFEVar xL = xMan.slice(0, nLowBits).cast(dfeUInt(nLowBits));
-		DFEVar xH = (k.constant.var(dfeRawBits(1), 1) # xMan.slice(nLowBits, nLUTBits) # k.constant.var(dfeRawBits(nLowBits), 0)).cast(dfeUInt(xType.getMantissaBits()));
-		DFEVar xH0 = xMan.slice(nLowBits, nLUTBits); // LUT accounts for implicit 1
+		DFEVar xH = (k.constant.var(dfeRawBits(1), 1) # xMan.slice(nLowBits, nLUTAddrBits) # k.constant.var(dfeRawBits(nLowBits), 0)).cast(dfeUInt(xType.getMantissaBits()));
+		DFEVar xH0 = xMan.slice(nLowBits, nLUTAddrBits); // LUT accounts for implicit 1
 
 		k.optimization.pushEnableBitGrowth(true);
 		DFEVar xDiff = xH - xL;
@@ -171,13 +193,15 @@ public class Divider extends KernelLib{
 
 		// Fill the look up table with 1 / xH^2 values, assuming the implicit 1 at MSB
 		double maxVal = 1/Math.pow(Math.pow(2, xType.getMantissaBits() - 1), 2); // = 1/min(xH)^2
-		DFEType txInvSq = dfeFixMax(xType.getMantissaBits() + 1, maxVal, SignMode.TWOSCOMPLEMENT);
+		//DFEType txInvSq = dfeFixMax(xType.getMantissaBits() + 1, maxVal, SignMode.TWOSCOMPLEMENT);
+		DFEType txInvSq = dfeFixMax(nLUTDataBits, maxVal, SignMode.TWOSCOMPLEMENT);
+
 		int nLUTVals = (int) Math.pow(2, xH0.getType().getTotalBits());
 
 		Memory<DFEVar> xHInvLUT = k.mem.alloc(txInvSq, nLUTVals);
 		double xInvVals[] = new double[nLUTVals];
 		for(int n = 0; n < nLUTVals; n++){
-			double xVal = (n + Math.pow(2, nLUTBits)) * Math.pow(2, nLowBits);
+			double xVal = (n + Math.pow(2, nLUTAddrBits)) * Math.pow(2, nLowBits);
 			xInvVals[n] = 1 / (xVal * xVal);
 		}
 		xHInvLUT.setContents(xInvVals);
