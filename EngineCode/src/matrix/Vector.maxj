@@ -2,6 +2,7 @@ package matrix;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 
 public class Vector extends Matrix{
 
@@ -10,6 +11,14 @@ public class Vector extends Matrix{
 	}
 
 	private Shape shape = Shape.COL;
+
+	public Vector(DFEVector<DFEVar> data){
+		super(data.get(0).getKernel());
+		DFEVar[][] matData = new DFEVar[data.getSize()][1];
+		for(int i = 0; i < data.getSize(); i++)
+			matData[i][0] = data.get(i);
+		this.data(matData);
+	}
 
 	public Vector(DFEVar[] data){
 		super(data[0].getKernel());

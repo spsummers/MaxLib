@@ -1,9 +1,8 @@
 package matrix;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
@@ -124,10 +123,18 @@ public class Matrix extends LinAlg{
 		return new Matrix(rawdata);
 	}
 
-	private static boolean isSigned(DFEVar x){
-		Pattern p = Pattern.compile("TWOSCOMPLEMENT");
-		Matcher m = p.matcher(x.getType().toString());
-		return m.find();
+	public static Matrix identity(Kernel owner, int dimension){
+		DFEVar[][] I = new DFEVar[dimension][dimension];
+		for(int i = 0; i < dimension; i++){
+			for(int j = 0; j < dimension; j++){
+				if(i == j){
+					I[i][j] = owner.constant.var(1);
+				}else{
+					I[i][j] = owner.constant.var(0);
+				}
+			}
+		}
+		return new Matrix(I);
 	}
 
 	public Matrix add(Matrix rhs){
@@ -144,5 +151,14 @@ public class Matrix extends LinAlg{
 
 	public static Inverter getInversionAlgorithm(){
 		return inverter;
+	}
+
+	private static boolean isSigned(DFEVar x){
+		boolean signed = true; // floating point is always signed
+		if(x.getType() instanceof DFEFix){
+			DFEFix t = (DFEFix) x.getType();
+			signed = t.getSignMode() == SignMode.TWOSCOMPLEMENT;
+		}
+		return signed;
 	}
 }
