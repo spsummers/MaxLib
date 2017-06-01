@@ -156,7 +156,7 @@ public class SymMatrix<T> extends KernelLib{
 		DFEType t = ((DFEVar) data.get(0)).getType();
 		boolean sameType = true;
 		for(T item : data){
-			sameType = ((DFEVar) item).getType() == t;
+			sameType = ((DFEVar) item).getType().equals(t) && sameType;
 		}
 		return sameType;
 	}

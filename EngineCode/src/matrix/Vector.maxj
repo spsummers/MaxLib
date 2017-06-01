@@ -86,15 +86,15 @@ public class Vector extends Matrix{
 
 	public KernelObject packForIO(){
 		KernelObject packed;
-		Vector v = new Vector(this);
+		Vector v = new Vector(this.data);
 		v.shape(Shape.COL);
 		if(sameType()){
-			DFEVectorType<DFEVar> tPacked = new DFEVectorType<DFEVar>(data(0, 0).getType(), v.nCols());
+			DFEVectorType<DFEVar> tPacked = new DFEVectorType<DFEVar>(data(0, 0).getType(), v.nRows());
 			packed = tPacked.newInstance(getKernel());
 			for(int i = 0; i < v.nRows(); i++)
 				((DFEVector<DFEVar>) packed).get(i) <== v.data(i, 0);
 		}else{
-			StructFieldType[] sfts = new StructFieldType[v.nCols()];
+			StructFieldType[] sfts = new StructFieldType[v.nRows()];
 			for(int i = 0; i < v.nRows(); i++)
 				sfts[i] = new StructFieldType(""+i, v.data(i, 0).getType());
 			DFEStructType tPacked = new DFEStructType(sfts);
@@ -111,7 +111,7 @@ public class Vector extends Matrix{
 		v.shape(Shape.COL);
 		DFEType T = v.data(0, 0).getType();
 		for(int i = 0; i < v.nRows(); i++)
-			same = v.data(i, 0).getType() == T;
+			same = v.data(i, 0).getType().equals(T) && same;
 		return same;
 	}
 
