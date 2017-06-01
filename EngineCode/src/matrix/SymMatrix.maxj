@@ -160,4 +160,26 @@ public class SymMatrix<T> extends KernelLib{
 		}
 		return sameType;
 	}
+
+	/**
+	 * Add two symmetric matrices.
+	 * Saves on resources due to symmetry
+	 * @param rhs
+	 * @return
+	 */
+	public SymMatrix<T> add(SymMatrix<T> rhs){
+		Matrix result = this.matrix() + rhs.matrix();
+		return new SymMatrix<T>(result);
+	}
+
+	/**
+	 * Subtract two symmetric matrices.
+	 * Saves on resources due to symmetry
+	 * @param rhs
+	 * @return
+	 */
+	public SymMatrix<T> sub(SymMatrix<T> rhs){
+		Matrix result = this.matrix() - rhs.matrix();
+		return new SymMatrix<T>(result);
+	}
 }
