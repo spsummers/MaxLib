@@ -76,11 +76,12 @@ public class Vector extends Matrix{
 	}
 
 	public Vector add(Vector rhs){
-		return (Vector) ((LinAlg)this).add(rhs);
+		return new Vector(((LinAlg) this).add(rhs).data);
+
 	}
 
 	public Vector sub(Vector rhs){
-		return (Vector) ((LinAlg) this).sub(rhs);
+		return new Vector(((LinAlg) this).sub(rhs).data);
 	}
 
 	public KernelObject packForIO(){
