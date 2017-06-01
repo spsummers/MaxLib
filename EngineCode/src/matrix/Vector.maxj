@@ -1,8 +1,14 @@
 package matrix;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStruct;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.StructFieldType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
 public class Vector extends Matrix{
 
@@ -12,6 +18,11 @@ public class Vector extends Matrix{
 
 	private Shape shape = Shape.COL;
 
+	public Vector(Vector other){
+		super(other.data(0, 0).getKernel());
+		this.data(other.data);
+		this.shape = other.shape;
+	}
 	public Vector(DFEVector<DFEVar> data){
 		super(data.get(0).getKernel());
 		DFEVar[][] matData = new DFEVar[data.getSize()][1];
@@ -70,6 +81,37 @@ public class Vector extends Matrix{
 
 	public Vector sub(Vector rhs){
 		return (Vector) ((LinAlg) this).sub(rhs);
+	}
+
+	public KernelObject packForIO(){
+		KernelObject packed;
+		Vector v = new Vector(this);
+		v.shape(Shape.COL);
+		if(sameType()){
+			DFEVectorType<DFEVar> tPacked = new DFEVectorType<DFEVar>(data(0, 0).getType(), v.nCols());
+			packed = tPacked.newInstance(getKernel());
+			for(int i = 0; i < v.nRows(); i++)
+				((DFEVector<DFEVar>) packed).get(i) <== v.data(i, 0);
+		}else{
+			StructFieldType[] sfts = new StructFieldType[v.nCols()];
+			for(int i = 0; i < v.nRows(); i++)
+				sfts[i] = new StructFieldType(""+i, v.data(i, 0).getType());
+			DFEStructType tPacked = new DFEStructType(sfts);
+			packed = tPacked.newInstance(getKernel());
+			for(int i = 0; i < v.nRows(); i++)
+				((DFEStruct) packed).get(""+i) <== v.data(i, 0);
+		}
+		return packed;
+	}
+
+	private boolean sameType(){
+		boolean same = true;
+		Vector v = new Vector(this);
+		v.shape(Shape.COL);
+		DFEType T = v.data(0, 0).getType();
+		for(int i = 0; i < v.nRows(); i++)
+			same = v.data(i, 0).getType() == T;
+		return same;
 	}
 
 }
