@@ -138,11 +138,11 @@ public class Matrix extends LinAlg{
 	}
 
 	public Matrix add(Matrix rhs){
-		return (Matrix) ((LinAlg)this).add(rhs);
+		return new Matrix(((LinAlg) this).add(rhs).data());
 	}
 
 	public Matrix sub(Matrix rhs){
-		return (Matrix) ((LinAlg)this).sub(rhs);
+		return new Matrix(((LinAlg) this).sub(rhs).data());
 	}
 
 	public static void setInversionAlgorithm(Inverter i){
