@@ -1,0 +1,40 @@
+package misc;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEStructType.StructFieldType;
+
+public class Misc {
+
+	/**
+	 * Pad an array of StructFieldTypes to a multiple of 128 bits
+	 * Adds an an extra field to the struct if needed
+	 * @param fields
+	 * @return
+	 */
+	public static PaddedStructType addPCIEPadding(StructFieldType[] fields){
+		DFEStructType dummy = new DFEStructType(fields);
+		int nBits = dummy.getTotalBits();
+		DFEStructType tIn;
+		boolean needsPadding = (nBits % 128 != 0);
+		System.out.println("Needs padding: " + needsPadding);
+		if(needsPadding){
+			StructFieldType sftPadding = new StructFieldType("padding", DFETypeFactory.dfeRawBits(128 - (nBits % 128)));
+			StructFieldType[] newFields = new StructFieldType[fields.length + 1];
+			System.arraycopy(fields, 0, newFields, 0, fields.length);
+			newFields[fields.length] = sftPadding;
+			tIn = new DFEStructType(newFields);
+		}else{
+			tIn = new DFEStructType(fields);
+		}
+		return new PaddedStructType(tIn, needsPadding);
+	}
+
+	public static class PaddedStructType{
+		private final DFEStructType data;
+		private final boolean padded;
+		public PaddedStructType(DFEStructType data, boolean padded){ this.data = data; this.padded = padded; }
+		public DFEStructType data(){ return data; }
+		public boolean padded(){ return padded; }
+	}
+}
