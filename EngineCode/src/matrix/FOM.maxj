@@ -85,7 +85,7 @@ public class FOM{
         return ops;
     }
 
-    public DFEVar wrapProtectedCast(DFEVar x){
+    /*public DFEVar wrapProtectedCast(DFEVar x){
     	double minVal = -Math.pow(2, nBits - nFracBits - 1);
     	double maxVal = Math.pow(2, nBits - nFracBits - 1) - Math.pow(2, -nFracBits);
     	//x.getKernel();
@@ -94,6 +94,19 @@ public class FOM{
     	DFEVar xH = x > maxVal ? maxVal : xCast;
     	DFEVar xWrapProtect = x < 0 ? xL : xH;
     	return xWrapProtect;
+    }*/
+
+    public WPVar wrapProtectedCast(DFEVar x){
+    	double minVal = -Math.pow(2, nBits - nFracBits - 1);
+    	double maxVal = Math.pow(2, nBits - nFracBits - 1) - Math.pow(2, -nFracBits);
+    	//x.getKernel();
+		DFEVar xCast = x.cast(KernelLib.dfeFix(nBits-nFracBits, nFracBits, SignMode.TWOSCOMPLEMENT));
+		DFEVar underflow = x < minVal;
+		DFEVar overflow = x > maxVal;
+    	DFEVar xL = underflow ? minVal : xCast;
+    	DFEVar xH = overflow ? maxVal : xCast;
+    	DFEVar xWrapProtect = x < 0 ? xL : xH;
+    	return new WPVar(xWrapProtect, overflow | underflow);
     }
 
     public DFEVar cast(DFEVar x){
@@ -107,6 +120,23 @@ public class FOM{
     	DFEVar xH = x > maxVal ? maxVal : x;
     	DFEVar xWrapProtect = x < 0 ? xL : xH;
     	return xWrapProtect;
+    }
+
+    /***
+     * Container class for WrapProtected cast results
+     * Contains a bool indicating whether a wrap occurred
+     * @author sioni
+     *
+     */
+    public class WPVar{
+    	private final DFEVar x;
+    	private final DFEVar wrapped;
+    	public WPVar(DFEVar x, DFEVar wrapped){
+    		this.x = x;
+    		this.wrapped = wrapped;
+    	}
+    	public DFEVar x(){ return x; }
+    	public DFEVar wrapped(){ return wrapped; }
     }
 
 }
