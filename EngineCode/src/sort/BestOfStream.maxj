@@ -1,0 +1,67 @@
+package sort;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class BestOfStream<T extends KernelObject<T>> extends KernelLib {
+
+	public enum Mode{
+		MAX, MIN;
+	}
+
+	List<T> best;
+	int n;
+
+	public BestOfStream(Kernel k, Mode m, int n, DFEVar comparison, T metadata){
+		super(k);
+		this.n = n;
+
+		List<T> metadata_offs = new ArrayList<T>();
+		List<DFEVar> comparison_offs = new ArrayList<DFEVar>();
+		for(int i = 0; i < n; i++){
+			T offsetMetadata = i == 0 ? metadata : k.stream.offset(metadata, -i);
+			metadata_offs.add(offsetMetadata);
+
+			DFEVar comparisonMetadata = i == 0 ? comparison : k.stream.offset(comparison, -i);
+			comparison_offs.add(comparisonMetadata);
+		}
+
+		List<Reductions.ReducedStreamInfo<T>> reduced = new ArrayList<Reductions.ReducedStreamInfo<T>>();
+
+		for(int i = 0; i < n; i++){
+			Reductions.ReducedStreamInfo<T> info;
+			DFEVar enable;
+			DFEVar reset = k.constant.var(false);
+			if(i == 0){
+				enable = k.constant.var(true);
+			}else{
+				switch(m){
+				case MAX: enable = ((Reductions.StreamMaxInfo<T>) reduced.get(i-1)).getMax() === comparison_offs.get(i-1); break;
+				case MIN: enable = ((Reductions.StreamMinInfo<T>) reduced.get(i-1)).getMin() === comparison_offs.get(i-1); break;
+				default: enable = k.constant.var(true); break;
+				}
+			}
+			switch(m){
+			case MAX: info = Reductions.streamMaxWithMetadata(comparison, metadata, reset, enable);	break;
+			case MIN: info = Reductions.streamMinWithMetadata(comparison, metadata, reset, enable);	break;
+			default: info = Reductions.streamMaxWithMetadata(comparison, metadata, reset, enable);	break;
+			}
+			reduced.add(info);
+		}
+
+	}
+
+	public T best(int i){
+		return best.get(i);
+	}
+
+	public List<T> best(){
+		return best;
+	}
+}
