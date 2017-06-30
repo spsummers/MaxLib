@@ -139,7 +139,9 @@ public class Divider extends KernelLib{
 		k.optimization.pushEnableBitGrowth(false);
 		xInvShift = positive ? xInvShift : - xInvShift;
 		k.optimization.popEnableBitGrowth();
-		xInvShift = xInvShift.cast(fixedpointReciprocalReturnType(x, nOutputBits, ignoreBits));
+		//xInvShift = xInvShift.cast(fixedpointReciprocalReturnType(x, nOutputBits, ignoreBits));
+		xInvShift = xInvShift.cast(dfeRawBits(nOutputBits)).cast(fixedpointReciprocalReturnType(x, nOutputBits, ignoreBits));
+
 		return xInvShift;
 	}
 

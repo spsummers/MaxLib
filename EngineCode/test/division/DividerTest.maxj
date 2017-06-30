@@ -18,12 +18,10 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
-import division.Divider;
-
 public class DividerTest {
 
 	private static class FixedPointReciprocalKernel extends Kernel{
-		
+
 		public FixedPointReciprocalKernel(KernelParameters params, DFEType t, int nIgnoreBits){
 			super(params);
 			DFEVar x = io.input("x", t);
@@ -31,13 +29,13 @@ public class DividerTest {
 			if(nIgnoreBits > 0){
 				y = Divider.reducedLUTDivide(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits());
 			}else{
-				y = Divider.reducedLUTDivideIgnore(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits(), ignoreBits);
+				y = Divider.reducedLUTDivideIgnore(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits(), nIgnoreBits);
 			}
 			io.output("y", y, y.getType());
 			System.out.println(y.getType());
 		}
 	}
-	
+
 	private static class KFReciprocalKernel extends Kernel{
 		private final static int nIntBits = 17;
 		private final static int nFracBits = 7;
@@ -45,50 +43,51 @@ public class DividerTest {
 		private final static int nInvFracBits = 32;
 		private final static DFEType T = dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
 		private final static DFEType tInv = dfeFix(nInvIntBits, nInvFracBits, SignMode.TWOSCOMPLEMENT);
+
 		public KFReciprocalKernel(KernelParameters params){
 			super(params);
-			DFEVar x = io.inut("x", tInv);
-			DFEVar y = Divider.reducedLUTDivideIgnore(x, 11, 13, 35, 35, 6);
-			io.output("y", y, y.getType());
+			DFEVar x = io.input("x", T);
+			DFEVar y = Divider.reducedLUTDivideIgnore(x, 11, 13, 35, 35, 6).cast(dfeRawBits(nInvIntBits + nInvFracBits)).cast(tInv);
+			System.out.println("y type expected: " +  (y.getType() == tInv));
 			System.out.println(y.getType());
+			io.output("y", y, y.getType());
 		}
 	}
 
 	private static class ReciprocalKernel extends Kernel{
 
-		public static DFEType t = dfeFloat(, 24);
+		public static DFEType t = dfeFloat(8, 24);
 		public ReciprocalKernel(KernelParameters params, int nLUTBits){
 			super(params);
 
 			DFEVar x = io.input("x", t);
-			DFEVar y = Divider.reducedLUTDivideFloat(x, nLUTBits);
+			DFEVar y = Divider.reducedLUTDivideFloat(x, nLUTBits, 25);
 			io.output("y", y, y.getType());
 		}
 	}
 
 	private static final int numRandom = 100;
 
-	//@Test public void testFixP_8_8(){ testFixedP(8, 8); }
-	//@Test public void testFixP_16_16(){ testFixedP(16, 16); }
-	//@Test public void testFixP_1_24(){ testFixedP(1, 24); }
-	//@Test public void testFixP_17_7(){ testFixedP(17, 7); }
+	//@Test public void testFixP_8_8(){ testFixedP(8, 8, 0); }
+	@Test public void testFixP_16_16(){ testFixedP(16, 16, 0); }
+	//@Test public void testFixP_1_24(){ testFixedP(1, 24, 0); }
 	@Test public void testKF(){ testKFReciprocal(); }
-	
+
 	public void testKFReciprocal(){
 		DFEType T = KFReciprocalKernel.T;
 		SimulationManager m = new SimulationManager("KFReciprocal");
-		KFReciprocalKernel kernel = new KFReciprocalKernel(m.makeKernelParameters(), T);
+		KFReciprocalKernel kernel = new KFReciprocalKernel(m.makeKernelParameters());
 		m.setKernel(kernel);
 		m.build();
-		double max = ((DFEFix)t).getMax();
+		double max = ((DFEFix)T).getMax();
 		double tol = max * Math.pow(2.0, -14);
-		runTest(m, t, tol);
+		runTest(m, T, tol);
 	}
-	
-	public void testFixedP(int nIntBits, int nFracBits){
+
+	public void testFixedP(int nIntBits, int nFracBits, int nIgnoreBits){
 		DFEType t = DFETypeFactory.dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
 		SimulationManager m = new SimulationManager("Reciprocal_master");
-		FixedPointReciprocalKernel kernel = new FixedPointReciprocalKernel(m.makeKernelParameters(), t);
+		FixedPointReciprocalKernel kernel = new FixedPointReciprocalKernel(m.makeKernelParameters(), t, nIgnoreBits);
 		m.setKernel(kernel);
 		m.build();
 		double max = ((DFEFix)t).getMax();
@@ -138,8 +137,10 @@ public class DividerTest {
 			else
 				min = 0;
 		}
+		System.out.println("max, min: " + max + ", " + min);
 		for (int i = 0; i < numRandom; i++) {
 			Double value = min + rng.nextDouble() * (max - min);
+			System.out.println(value);
 			input.add(t.encodeConstant(value));
 			scalarExpected.add(1.0/value);
 		}
@@ -149,7 +150,9 @@ public class DividerTest {
 		m.run();
 
 		for (int i = 0; i < totalCycles; i++) {
+			System.out.println(scalarExpected[i] + ", " + m.getOutputData("y")[i]);
 			assertEquals(scalarExpected[i], m.getOutputData("y")[i], tol);
+
 		}
 	}
 }
