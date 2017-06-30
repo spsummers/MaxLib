@@ -18,13 +18,37 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
+import division.Divider;
+
 public class DividerTest {
 
 	private static class FixedPointReciprocalKernel extends Kernel{
-		public FixedPointReciprocalKernel(KernelParameters params, DFEType t){
+		
+		public FixedPointReciprocalKernel(KernelParameters params, DFEType t, int nIgnoreBits){
 			super(params);
 			DFEVar x = io.input("x", t);
-			DFEVar y = Divider.reducedLUTDivide(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits());
+			DFEVar y;
+			if(nIgnoreBits > 0){
+				y = Divider.reducedLUTDivide(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits());
+			}else{
+				y = Divider.reducedLUTDivideIgnore(x, 10, t.getTotalBits() - 10, t.getTotalBits(), t.getTotalBits(), ignoreBits);
+			}
+			io.output("y", y, y.getType());
+			System.out.println(y.getType());
+		}
+	}
+	
+	private static class KFReciprocalKernel extends Kernel{
+		private final static int nIntBits = 17;
+		private final static int nFracBits = 7;
+		private final static int nInvIntBits = 3;
+		private final static int nInvFracBits = 32;
+		private final static DFEType T = dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
+		private final static DFEType tInv = dfeFix(nInvIntBits, nInvFracBits, SignMode.TWOSCOMPLEMENT);
+		public KFReciprocalKernel(KernelParameters params){
+			super(params);
+			DFEVar x = io.inut("x", tInv);
+			DFEVar y = Divider.reducedLUTDivideIgnore(x, 11, 13, 35, 35, 6);
 			io.output("y", y, y.getType());
 			System.out.println(y.getType());
 		}
@@ -32,7 +56,7 @@ public class DividerTest {
 
 	private static class ReciprocalKernel extends Kernel{
 
-		public static DFEType t = dfeFloat(8, 24);
+		public static DFEType t = dfeFloat(, 24);
 		public ReciprocalKernel(KernelParameters params, int nLUTBits){
 			super(params);
 
@@ -44,10 +68,23 @@ public class DividerTest {
 
 	private static final int numRandom = 100;
 
-	@Test public void testFixP_8_8(){ testFixedP(8, 8); }
-	@Test public void testFixP_16_16(){ testFixedP(16, 16); }
-	@Test public void testFixP_1_24(){ testFixedP(1, 24); }
-
+	//@Test public void testFixP_8_8(){ testFixedP(8, 8); }
+	//@Test public void testFixP_16_16(){ testFixedP(16, 16); }
+	//@Test public void testFixP_1_24(){ testFixedP(1, 24); }
+	//@Test public void testFixP_17_7(){ testFixedP(17, 7); }
+	@Test public void testKF(){ testKFReciprocal(); }
+	
+	public void testKFReciprocal(){
+		DFEType T = KFReciprocalKernel.T;
+		SimulationManager m = new SimulationManager("KFReciprocal");
+		KFReciprocalKernel kernel = new KFReciprocalKernel(m.makeKernelParameters(), T);
+		m.setKernel(kernel);
+		m.build();
+		double max = ((DFEFix)t).getMax();
+		double tol = max * Math.pow(2.0, -14);
+		runTest(m, t, tol);
+	}
+	
 	public void testFixedP(int nIntBits, int nFracBits){
 		DFEType t = DFETypeFactory.dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
 		SimulationManager m = new SimulationManager("Reciprocal_master");
