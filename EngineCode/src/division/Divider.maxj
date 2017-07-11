@@ -27,13 +27,15 @@ public class Divider extends KernelLib{
 		super(owner);
 	}
 
-	/*public static DFEVar reciprocal(DFEVar x){
+	public static DFEVar reciprocal(DFEVar x){
 		if(x.getType() instanceof DFEFloat){
-			return reducedLUTDivideFloat(x, 10);
+			return reducedLUTDivideFloat(x, 10, 25);
+		}else if(x.getType() instanceof DFEFix){
+			return reducedLUTDivide(x, 11, 35, x.getType().getTotalBits() + 16);
 		}else{
 			throw new IllegalArgumentException("Only float and fixed point types are supported.");
 		}
-	}*/
+	}
 
 	public static DFEVar divInt18_1BRAM_1DSP(DFEVar x){
 		return reducedLUTDivide(x, 11, 7, 25, 25);
@@ -44,7 +46,9 @@ public class Divider extends KernelLib{
 	}
 
 	public static DFEVar reducedLUTDivide(DFEVar x, int nHighBits, int nLowBits, int nInvBits, int nOutputBits){
-		Kernel k = x.getKernel();
+		return reducedLUTDivideIgnore(x, nHighBits, nLowBits, nInvBits, nOutputBits, 0);
+	}
+		/*Kernel k = x.getKernel();
 		k.optimization.pushEnableBitGrowth(true);
 		int nInBits = x.getType().getTotalBits();
 		DFEVar positive = x > 0;
@@ -89,6 +93,10 @@ public class Divider extends KernelLib{
 		xInvShiftTrunc = positive ? xInvShiftTrunc : - xInvShiftTrunc;
 		k.optimization.popEnableBitGrowth();
 		return xInvShiftTrunc;
+	}*/
+
+	public static DFEVar reducedLUTDivide(DFEVar x, int nLUTAddrBits, int nLUTDataBits, int nOutputBits){
+		return reducedLUTDivideIgnore(x, nLUTAddrBits + 1, x.getType().getTotalBits() - nLUTAddrBits - 1, nLUTDataBits, nOutputBits, 0);
 	}
 
 	public static DFEVar reducedLUTDivideIgnore(DFEVar x, int nHighBits, int nLowBits, int nInvBits, int nOutputBits, int ignoreBits){
@@ -245,7 +253,7 @@ public class Divider extends KernelLib{
 	private static DFEType fixedpointReciprocalReturnType(DFEVar x, int nOutputBits, int nIgnoreBits){
 		if(x.getType() instanceof DFEFix){
 			DFEFix t = (DFEFix) x.getType();
-			int nIntBits = t.getFractionBits() - nIgnoreBits + 1;
+			int nIntBits = t.getFractionBits() - nIgnoreBits + 2;
 			int nFracBits = nOutputBits - nIntBits;
 			return DFETypeFactory.dfeFix(nIntBits, nFracBits, SignMode.TWOSCOMPLEMENT);
 		}else{
