@@ -10,11 +10,14 @@ import division.Inverter;
 
 public class Matrix extends LinAlg{
 
+	/***
+	 * Default inversion algorithm for reciprocal in matrix inversion
+	 * Change with setInversionAlgorithm
+	 */
 	private static Inverter inverter = new Inverter(){
 		public DFEVar invert(DFEVar x) {
 			return 1 / x;
 		}
-
 	};
 
 	public Matrix(Kernel owner){
@@ -58,8 +61,21 @@ public class Matrix extends LinAlg{
 		if(nCols() != 2 | nRows() != 2)
 			System.err.println("Can only invert 2x2 matrices.");
 		DFEVar[][] result = new DFEVar[2][2];
-		DFEVar inv00 = 1/data(0, 0);
-		DFEVar inv11 = 1/data(1, 1);
+		DFEVar inv00 = inverter.invert(data(0, 0));
+		DFEVar inv11 = inverter.invert(data(1, 1));
+		result[0][0] = inv00;
+		result[1][1] = inv11;
+		result[0][1] = constant.var(0);
+		result[1][0] = constant.var(0);
+		return new Matrix(result);
+	}
+
+	public Matrix diagonalInverse(Inverter i00, Inverter i11){
+		if(nCols() != 2 | nRows() != 2)
+			System.err.println("Can only invert 2x2 matrices.");
+		DFEVar[][] result = new DFEVar[2][2];
+		DFEVar inv00 = i00.invert(data(0, 0));
+		DFEVar inv11 = i11.invert(data(1, 1));
 		result[0][0] = inv00;
 		result[1][1] = inv11;
 		result[0][1] = constant.var(0);
