@@ -15,7 +15,7 @@ public class BestOfStream<T extends KernelObject<T>> extends KernelLib {
 		MAX, MIN;
 	}
 
-	List<T> best;
+	List<Reductions.ReducedStreamInfo<T>> best;
 	int n;
 
 	public BestOfStream(Kernel k, Mode m, int n, DFEVar comparison, T metadata){
@@ -54,14 +54,16 @@ public class BestOfStream<T extends KernelObject<T>> extends KernelLib {
 			}
 			reduced.add(info);
 		}
-
+		this.best = reduced;
 	}
 
-	public T best(int i){
+
+
+	public Reductions.ReducedStreamInfo<T> best(int i){
 		return best.get(i);
 	}
 
-	public List<T> best(){
+	public List<Reductions.ReducedStreamInfo<T>> best(){
 		return best;
 	}
 }
