@@ -11,7 +11,10 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
+import division.Inverter;
+
 public class LinAlg extends KernelLib{
+
 	protected DFEVar[][] data;
 	private DFEVar[][][] intermediateData;
 	private static boolean storeIntermediates;
@@ -19,6 +22,17 @@ public class LinAlg extends KernelLib{
 	private int nCols;
 	private final Kernel kernel;
 	static Deque<Double> dspPipeliningFactor = new ArrayDeque<Double>(Arrays.asList(1.0));
+
+	/***
+	 * Default inversion algorithm for reciprocal in matrix inversion
+	 * Change with setInversionAlgorithm
+	 */
+	protected static Inverter inverter = new Inverter(){
+		@Override
+		public DFEVar invert(DFEVar x) {
+			return 1 / x;
+		}
+	};
 
 	public LinAlg(Kernel owner){
 		super(owner);
@@ -397,4 +411,12 @@ public class LinAlg extends KernelLib{
     		System.out.println();
     	}
     }
+
+	public static void setInversionAlgorithm(Inverter i){
+		inverter = i;
+	}
+
+	public static Inverter getInversionAlgorithm(){
+		return inverter;
+	}
 }

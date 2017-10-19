@@ -1,6 +1,10 @@
 package matrix;
 
+import maxpower.kernel.KernelBinaryOp.Add;
+import maxpower.utils.TreeReduce;
+
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.KernelMath;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
@@ -17,6 +21,10 @@ public class Vector extends Matrix{
 	}
 
 	private Shape shape = Shape.COL;
+
+	private DFEVar normSquared = null;
+	private DFEVar norm = null;
+	private DFEVar normReciprocal = null;
 
 	public Vector(Vector other){
 		super(other.data(0, 0).getKernel());
@@ -84,6 +92,40 @@ public class Vector extends Matrix{
 		return new Vector(((LinAlg) this).sub(rhs).data);
 	}
 
+	public DFEVar normSquared(){
+		if(this.normSquared == null){
+			DFEVar[] squares = new DFEVar[this.length()];
+			for(int i = 0; i < data.length; i++){
+				squares[i] = this.data(i) * this.data(i);
+			}
+			this.normSquared = TreeReduce.reduce(new Add<DFEVar>(), squares);
+		}
+		return this.normSquared;
+	}
+
+	public DFEVar norm(DFEType normType){
+		if(this.norm == null){
+			this.norm = KernelMath.sqrt(this.normSquared(), normType);
+		}
+		return this.norm;
+	}
+
+	public DFEVar normReciprocal(DFEType normType){
+		if(this.normReciprocal == null){
+			this.normReciprocal = inverter.invert(this.norm(normType));
+		}
+		return this.normReciprocal;
+	}
+
+	public Vector unit(DFEType normType){
+		DFEVar[] unitVector = new DFEVar[this.length()];
+		for(int i = 0; i < data.length; i++){
+			unitVector[i] = this.data(i) * this.normReciprocal(normType);
+		}
+		return new Vector(unitVector);
+
+	}
+
 	public KernelObject packForIO(){
 		KernelObject packed;
 		Vector v = new Vector(this.data);
@@ -113,6 +155,59 @@ public class Vector extends Matrix{
 		for(int i = 0; i < v.nRows(); i++)
 			same = v.data(i, 0).getType().equals(T) && same;
 		return same;
+	}
+
+	public int length(){
+		return Math.max(data.length, data[0].length);
+	}
+
+	public static DFEVar dot(Vector a, Vector b){
+		DFEVar[] products = new DFEVar[a.length()];
+		for(int i = 0; i < a.length(); i++){
+			products[i] = a.data(i) * b.data(i);
+		}
+		return TreeReduce.reduce(new Add<DFEVar>(), products);
+	}
+
+	public static Vector cross(Vector a, Vector b){
+		if(a.length() != 3 || b.length() != 3)
+			System.err.println("Only implemented cross product for length 3 vectors");
+		DFEVar[] determinants = new DFEVar[3];
+		for(int i = 0; i < 3; i++){
+			DFEVar[][] thisDeterminant = new DFEVar[2][2];
+			int iL = i == 0 ? 2 : 1;
+			int iR = i == 2 ? 2 : 3;
+			thisDeterminant[0][0] = a.data(iL);
+			thisDeterminant[0][1] = a.data(iR);
+			thisDeterminant[1][0] = b.data(iL);
+			thisDeterminant[1][1] = b.data(iR);
+			determinants[i] = new Matrix(thisDeterminant).determinant();
+		}
+		return new Vector(determinants);
+	}
+
+	public Vector elementwiseMul(Vector b){
+		if(this.length() != b.length()){
+			System.err.println("Lengths must be equal");
+		}
+		DFEVar[] result = new DFEVar[this.length()];
+		for(int i = 0; i < this.length(); i++){
+			result[i] = this.data(i) * b.data(i);
+		}
+		return new Vector(result);
+	}
+
+	/**
+	 * Get a subvector from a vector from indices low to high (inclusive)
+	 * @param low: the lower index
+	 * @param high: the upper undex
+	 * @return
+	 */
+	public Vector subVec(int low, int high){
+		DFEVar[] subVec = new DFEVar[high - low + 1];
+		for(int i = 0; i <= high - low; i++)
+			subVec[i] = this.data(low+i);
+		return new Vector(subVec);
 	}
 
 }

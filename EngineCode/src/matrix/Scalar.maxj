@@ -24,4 +24,8 @@ public class Scalar extends LinAlg{
 	public DFEVar value(){
 		return this.data[0][0];
 	}
+
+	public Vector mul(Vector rhs){
+		return new Vector(((LinAlg) this).mul(rhs).data());
+	}
 }
